@@ -1,11 +1,13 @@
 import os
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches
 from openai import OpenAI
 import tempfile
+from aiohttp import web
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -84,7 +86,6 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
         if current_slide:
             slides_data.append(current_slide)
 
-        # Титульный слайд
         if slides_data:
             slide_layout = prs.slide_layouts[0]
             slide = prs.slides.add_slide(slide_layout)
@@ -92,7 +93,6 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
             if len(slide.placeholders) > 1:
                 slide.placeholders[1].text = "Сгенерировано ИИ-ботом"
 
-        # Остальные слайды
         for slide_info in slides_data[1:]:
             slide_layout = prs.slide_layouts[1]
             slide = prs.slides.add_slide(slide_layout)
@@ -125,13 +125,32 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
 
     except Exception as e:
         logger.error(f"Ошибка: {e}")
-        await update.message.reply_text("Произошла ошибка. Попробуй ещё раз или измени тему.")
+        await update.message.reply_text("Произошла ошибка. Попробуй ещё раз.")
 
-def main():
+async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_presentation))
-    app.run_polling()
+
+    # Запускаем бота
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # Простой веб-сервер, чтобы Render не убивал процесс
+    async def handle(request):
+        return web.Response(text="Bot is running")
+
+    web_app = web.Application()
+    web_app.router.add_get("/", handle)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    # Держим бота живым
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
