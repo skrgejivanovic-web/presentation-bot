@@ -6,11 +6,9 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.dml.color import RgbColor
+from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from openai import OpenAI
 import tempfile
 from aiohttp import web
@@ -22,28 +20,26 @@ client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Хранилище последних презентаций пользователей (в памяти)
 user_data = {}
 
-# Стили
 STYLES = {
     "тёмный": {
-        "bg": RgbColor(15, 23, 42),
-        "accent": RgbColor(56, 189, 248),
-        "text": RgbColor(248, 250, 252),
-        "sub": RgbColor(148, 163, 184)
+        "bg": RGBColor(15, 23, 42),
+        "accent": RGBColor(56, 189, 248),
+        "text": RGBColor(248, 250, 252),
+        "sub": RGBColor(148, 163, 184)
     },
     "светлый": {
-        "bg": RgbColor(248, 250, 252),
-        "accent": RgbColor(2, 132, 199),
-        "text": RgbColor(15, 23, 42),
-        "sub": RgbColor(100, 116, 139)
+        "bg": RGBColor(248, 250, 252),
+        "accent": RGBColor(2, 132, 199),
+        "text": RGBColor(15, 23, 42),
+        "sub": RGBColor(100, 116, 139)
     },
     "бизнес": {
-        "bg": RgbColor(15, 23, 42),
-        "accent": RgbColor(37, 99, 235),
-        "text": RgbColor(241, 245, 249),
-        "sub": RgbColor(148, 163, 184)
+        "bg": RGBColor(15, 23, 42),
+        "accent": RGBColor(37, 99, 235),
+        "text": RGBColor(241, 245, 249),
+        "sub": RGBColor(148, 163, 184)
     }
 }
 
@@ -65,7 +61,6 @@ def create_presentation(slides_data, style_name="тёмный"):
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
-    # Титульный
     if slides_data:
         slide = prs.slides.add_slide(blank)
         set_background(slide, style["bg"])
@@ -91,8 +86,7 @@ def create_presentation(slides_data, style_name="тёмный"):
         p.font.size = Pt(14)
         p.font.color.rgb = style["sub"]
 
-    # Контент
-    for idx, info in enumerate(slides_data[1:]):
+    for info in slides_data[1:]:
         slide = prs.slides.add_slide(blank)
         set_background(slide, style["bg"])
         add_accent_bar(slide, style["accent"])
@@ -138,7 +132,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # === РЕДАКТИРОВАНИЕ СЛАЙДА ===
     if text.lower().startswith("измени слайд"):
         if user_id not in user_data:
             await update.message.reply_text("Сначала создай презентацию.")
@@ -146,7 +139,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         match = re.search(r"измени слайд\s+(\d+)", text.lower())
         if not match:
-            await update.message.reply_text("Напиши в формате:\nизмени слайд 3\nНовый пункт 1\nНовый пункт 2")
+            await update.message.reply_text("Формат:\nизмени слайд 3\nНовый пункт 1\nНовый пункт 2")
             return
 
         slide_num = int(match.group(1))
@@ -155,10 +148,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         data = user_data[user_id]
         if slide_num < 1 or slide_num > len(data["slides"]):
-            await update.message.reply_text(f"Слайд {slide_num} не существует. Всего слайдов: {len(data['slides'])}")
+            await update.message.reply_text(f"Слайд {slide_num} не существует.")
             return
 
-        # Обновляем
         if slide_num == 1:
             data["slides"][0]["title"] = new_points[0] if new_points else data["slides"][0]["title"]
         else:
@@ -176,11 +168,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(path)
         return
 
-    # === СОЗДАНИЕ НОВОЙ ПРЕЗЕНТАЦИИ ===
     style = "тёмный"
     topic = text
 
-    # Проверяем стиль
     for s in STYLES.keys():
         if text.lower().startswith(f"стиль {s}"):
             style = s
@@ -191,7 +181,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Напиши тему презентации.")
         return
 
-    await update.message.reply_text(f"Создаю презентацию в стиле «{style}»... 30–50 секунд.")
+    await update.message.reply_text(f"Создаю презентацию в стиле «{style}»...")
 
     try:
         prompt = f"""
@@ -229,7 +219,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current:
             slides_data.append(current)
 
-        # Сохраняем для редактирования
         user_data[user_id] = {"slides": slides_data, "style": style, "topic": topic}
 
         prs = create_presentation(slides_data, style)
@@ -242,7 +231,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=f,
                 filename=f"{topic[:40]}.pptx",
-                caption=f"Стиль: {style}\nЧтобы изменить слайд, напиши:\nизмени слайд 3\nНовый текст"
+                caption=f"Стиль: {style}\nЧтобы изменить слайд:\nизмени слайд 3\nНовый текст"
             )
         os.remove(path)
 
