@@ -4,13 +4,16 @@ import json
 import logging
 import os
 import re
+import time
 
 import aiohttp
 from aiohttp import web
 from openai import AsyncOpenAI
 from PIL import Image
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
@@ -35,6 +38,8 @@ logging.basicConfig(
     level=logging.INFO,
 )
 log = logging.getLogger("presentation-bot")
+
+VER = "8"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -235,9 +240,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sessions[update.effective_user.id] = Session()
     await update.message.reply_text(
         "Привет! Я делаю красивые презентации .pptx: дизайн под тему, "
-        "картинки, схемы, факты и цитаты.\n\n"
+        "картинки, схемы, диаграммы, факты и цитаты.\n\n"
         "Напиши тему одним сообщением.\n"
-        "Например: «Искусственный интеллект в медицине»."
+        "Например: «Искусственный интеллект в медицине».\n\n"
+        f"(версия {VER})"
     )
 
 
@@ -290,7 +296,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await q.edit_message_text(
             f"⏳ Рисую «{s.topic}» ({s.count} слайдов, "
-            f"{style_label(s)})…\nПодбираю картинки и шрифты, "
+            f"{style_label(s)})…\nПодбираю картинки, схемы и диаграммы, "
             "это займёт до пары минут."
         )
         await generate_and_send(update, context, s)
@@ -304,13 +310,19 @@ PROMPT = (
     '"intro" (1-2 catchy sentences), '
     '"slides" (array of exactly {count} objects, each with: "title" '
     '(string), "lead" (one engaging sentence), '
-    '"img" (3-5 ENGLISH words describing a photo for this slide), '
-    '"bullets" (array of 5-6 informative strings, each 8-18 words), '
+    '"img" (3-5 ENGLISH words with the main subject first, describing a '
+    'photo for this slide), '
+    '"bullets" (array of 5-6 NON-EMPTY informative strings, each 8-18 '
+    'words), '
     '"fact" (one surprising fact, quote or witty remark about the slide '
     'topic), "scheme" (array of 3-4 SHORT NON-EMPTY step names, include '
     "ONLY if the slide explains a process, otherwise omit)), "
     '"stats" (array of 3 objects with "value" (short number or percent) '
     'and "label" (short description), striking real-world statistics), '
+    '"chart" (object with "title" (string), "type" ("pie" or "bar"), '
+    '"data" (array of 4-6 objects with "label" (short string) and '
+    '"value" (number; use percents 0-100 when type is pie)), realistic '
+    'statistics about the topic), '
     '"conclusion" (2-3 inspiring sentences). '
     "Write EVERY string strictly in {lang}, never mix languages. "
     "Topic: {topic}"
@@ -422,6 +434,7 @@ async def fallback_content(s):
         "intro": "",
         "slides": slides,
         "stats": [],
+        "chart": None,
         "conclusion": "Изучайте новое каждый день!",
     }
 
@@ -443,6 +456,18 @@ def prepare_image(raw, w=900, h=600):
     out = io.BytesIO()
     img.save(out, format="JPEG", quality=85)
     return out.getvalue()
+
+
+def _tokens(q):
+    return set(re.findall(r"[a-z0-9а-яё]{4,}", (q or "").lower()))
+
+
+def _relevant(query, title):
+    qw = _tokens(query)
+    tw = _tokens(title)
+    if not qw or not tw:
+        return True
+    return bool(qw & tw)
 
 
 async def _download_image(sess, url):
@@ -470,7 +495,7 @@ async def fetch_topic_image(query):
                 "generator": "search",
                 "gsrnamespace": "6",
                 "gsrsearch": f"filetype:bitmap {query}",
-                "gsrlimit": "3",
+                "gsrlimit": "5",
                 "prop": "imageinfo",
                 "iiprop": "url|mime",
                 "iiurlwidth": "900",
@@ -479,6 +504,8 @@ async def fetch_topic_image(query):
                 data = await r.json(content_type=None)
             pages = (data.get("query") or {}).get("pages") or {}
             for page in pages.values():
+                if not _relevant(query, page.get("title")):
+                    continue
                 info = (page.get("imageinfo") or [{}])[0]
                 url = info.get("thumburl") or info.get("url")
                 mime = info.get("mime") or ""
@@ -515,10 +542,12 @@ async def fetch_topic_image(query):
             log.warning("wiki image failed for %s: %s", query, e)
         try:
             async with sess.get(OPENVERSE_API,
-                                params={"q": query, "page_size": "3"}) as r:
+                                params={"q": query, "page_size": "5"}) as r:
                 if r.status == 200:
                     data = await r.json(content_type=None)
                     for res in (data.get("results") or []):
+                        if not _relevant(query, res.get("title")):
+                            continue
                         url = res.get("url") or ""
                         if url:
                             img = await _download_image(sess, url)
@@ -527,17 +556,6 @@ async def fetch_topic_image(query):
                                 return img
         except Exception as e:
             log.warning("openverse failed for %s: %s", query, e)
-        try:
-            tags = re.sub(r"[^a-zA-Z0-9]+", ",", query or "")[:60]
-            tags = tags.strip(",") or "topic"
-            img = await _download_image(
-                sess, f"https://loremflickr.com/900/600/{tags}/all"
-            )
-            if img:
-                log.info("image from loremflickr: %s", query)
-                return img
-        except Exception as e:
-            log.warning("loremflickr failed for %s: %s", query, e)
     return None
 
 
@@ -613,13 +631,34 @@ def clean_bullets(raw, limit=5):
 def clean_scheme(raw):
     out = []
     for x in raw or []:
-        t = str(x).strip()
+        if not isinstance(x, str):
+            continue
+        t = x.strip()
         t = t.strip("\"'“”«»`)")
         if len(t) > 1:
             out.append(t[:60])
         if len(out) >= 4:
             break
+    if len(out) < 2:
+        return []
     return out
+
+
+def chart_rows(chart):
+    rows = []
+    for d in (chart or {}).get("data") or []:
+        if not isinstance(d, dict):
+            continue
+        label = str(d.get("label", "")).strip()[:40]
+        try:
+            value = float(d.get("value", 0))
+        except (TypeError, ValueError):
+            continue
+        if label:
+            rows.append((label, value))
+        if len(rows) >= 6:
+            break
+    return rows if len(rows) >= 2 else []
 
 
 def add_bullets(slide, x, y, w, h, bullets, pal, size=20):
@@ -737,7 +776,7 @@ def add_content_slide(prs, item, pal, num, total, img):
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
     add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1),
-                       Inches(1.0), f"{num - 1:02d}",
+                       Inches(1.0), f"{num - 2:02d}",
                        str(item.get("title") or ""), 40, pal)
     add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08),
              pal["accent"])
@@ -748,6 +787,8 @@ def add_content_slide(prs, item, pal, num, total, img):
                  font=pal["bfont"])
     scheme = clean_scheme(item.get("scheme"))
     bullets = clean_bullets(item.get("bullets"), 5)
+    rich = bool(img) or bool(scheme) or len(bullets) >= 4
+    bsize = 20 if rich else 24
     wide = Inches(12.0)
     if img and not scheme:
         wide = Inches(8.2)
@@ -758,9 +799,12 @@ def add_content_slide(prs, item, pal, num, total, img):
         add_bullets(slide, Inches(0.65), Inches(2.3), wide,
                     Inches(2.0), bullets[:3], pal, size=19)
         add_scheme(slide, scheme, pal, Inches(4.55))
-    else:
+    elif rich:
         add_bullets(slide, Inches(0.65), Inches(2.3), wide,
-                    Inches(3.6), bullets, pal)
+                    Inches(3.6), bullets, pal, size=bsize)
+    else:
+        add_bullets(slide, Inches(0.65), Inches(2.6), wide,
+                    Inches(3.3), bullets, pal, size=bsize)
     fact = str(item.get("fact") or "")
     if fact:
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(1.0),
@@ -810,6 +854,49 @@ def add_stats_slide(prs, stats, pal, num, total):
              font=pal["bfont"])
 
 
+def add_chart_slide(prs, chart, rows, pal, num, total):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(slide, pal["bg"])
+    add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
+    add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
+    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
+             str(chart.get("title") or "Диаграмма"), 40, pal["text"],
+             bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
+             pal["accent"])
+    cd = CategoryChartData()
+    cd.categories = [r[0] for r in rows]
+    cd.add_series("Значения", tuple(r[1] for r in rows))
+    ctype = XL_CHART_TYPE.PIE
+    if str(chart.get("type", "")).lower() == "bar":
+        ctype = XL_CHART_TYPE.BAR_CLUSTERED
+    gf = slide.shapes.add_chart(
+        ctype, Inches(1.0), Inches(1.8), Inches(11.3), Inches(5.1), cd
+    )
+    ch = gf.chart
+    try:
+        ch.has_legend = True
+        ch.legend.position = XL_LEGEND_POSITION.BOTTOM
+        ch.legend.include_in_layout = False
+        ch.font.size = Pt(14)
+        ch.font.color.rgb = pal["text"]
+        plot = ch.plots[0]
+        plot.has_data_labels = True
+        plot.data_labels.font.size = Pt(13)
+        plot.data_labels.font.color.rgb = pal["text"]
+        if ctype == XL_CHART_TYPE.PIE:
+            colors = (pal["accent"], pal["accent2"], pal["muted"],
+                      pal["accent"], pal["accent2"], pal["muted"])
+            for i, point in enumerate(plot.series[0].points):
+                point.format.fill.solid()
+                point.format.fill.fore_color.rgb = colors[i % len(colors)]
+    except Exception as e:
+        log.warning("chart styling skipped: %s", e)
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
+             f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT,
+             font=pal["bfont"])
+
+
 def add_final_slide(prs, content, pal, num, total):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["accent2"])
@@ -840,7 +927,10 @@ def build_pptx(content, s, slide_imgs, title_img):
     slides = content.get("slides", [])[: s.count]
     stats = content.get("stats") or []
     has_stats = isinstance(stats, list) and bool(stats)
-    total = 2 + len(slides) + (1 if has_stats else 0) + 1
+    rows = chart_rows(content.get("chart"))
+    has_chart = bool(rows)
+    total = 2 + len(slides) + (1 if has_stats else 0)
+    total += (1 if has_chart else 0) + 1
     add_title_slide(prs, content, pal, s, title_img)
     add_agenda_slide(prs, [it.get("title", "") for it in slides], pal)
     num = 3
@@ -850,6 +940,9 @@ def build_pptx(content, s, slide_imgs, title_img):
         num += 1
     if has_stats:
         add_stats_slide(prs, stats, pal, num, total)
+        num += 1
+    if has_chart:
+        add_chart_slide(prs, content.get("chart"), rows, pal, num, total)
         num += 1
     add_final_slide(prs, content, pal, num, total)
     buf = io.BytesIO()
@@ -873,9 +966,10 @@ async def generate_and_send(update, context, s):
         slides = content.get("slides", [])[: s.count]
         slide_imgs = []
         fetched = 0
+        deadline = time.monotonic() + 60
         for item in slides:
             img = None
-            if fetched < 8:
+            if fetched < 8 and time.monotonic() < deadline:
                 query = str(item.get("img") or item.get("title") or s.topic)
                 try:
                     img = await asyncio.wait_for(
@@ -898,7 +992,8 @@ async def generate_and_send(update, context, s):
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
         pics = fetched + (1 if title_img else 0)
-        caption = f"✅ Готово! Оформление: {pal_name} | 🖼 фото: {pics}"
+        caption = (f"✅ Готово! Оформление: {pal_name} | 🖼 фото: {pics} "
+                   f"| v{VER}")
         if source == "wiki":
             caption += "\n⚠️ AI-лимит исчерпан — текст собран из Википедии"
         await context.bot.send_document(
@@ -945,7 +1040,7 @@ async def main():
     await app.initialize()
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
-    log.info("Bot started (polling)")
+    log.info("Bot started (polling), version %s", VER)
     log.info("Model chain: %s", MODEL_CHAIN)
 
     webapp = web.Application()
