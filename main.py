@@ -5,6 +5,7 @@ import logging
 import os
 import re
 
+import aiohttp
 from aiohttp import web
 from openai import AsyncOpenAI
 from PIL import Image
@@ -40,7 +41,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if OPENAI_API_KEY.startswith("gsk_"):
     DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-    DEFAULT_MODEL = "openai/gpt-oss-120b"
+    DEFAULT_MODEL = "llama-3.3-70b-versatile"
 else:
     DEFAULT_BASE_URL = None
     DEFAULT_MODEL = "gpt-4o-mini"
@@ -282,8 +283,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 PROMPT = (
     "You are a top-tier presentation designer and writer. "
-    "Return ONLY valid JSON, no markdown, with keys: "
-    '"title" (string), "subtitle" (string), "intro" (1-2 catchy sentences), '
+    "Return ONLY valid JSON, no markdown, no explanations, "
+    'with keys: "title" (string), "subtitle" (string), "intro" (1-2 catchy sentences), '
     '"slides" (array of exactly {count} objects, each with: "title" '
     '(string), "lead" (one engaging sentence), "bullets" (array of 5-6 '
     "informative strings, each 8-18 words), "
@@ -297,22 +298,56 @@ PROMPT = (
 )
 
 
-async def ask_ai(s):
+def extract_json(text):
+    text = text.strip()
+    code_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+    if code_match:
+        text = code_match.group(1)
+    start = text.find('{')
+    end = text.rfind('}')
+    if start == -1 or end == -1 or start >= end:
+        return None
+    return text[start:end + 1]
+
+
+async def ask_ai(s, retries=2):
     lang = "Russian" if s.lang == "ru" else "English"
     prompt = PROMPT.format(lang=lang, count=s.count, topic=s.topic)
-    resp = await ai.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-    )
-    raw = resp.choices[0].message.content or ""
-    start, end = raw.find("{"), raw.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("no JSON in AI response")
-    content = json.loads(raw[start : end + 1])
-    if not isinstance(content.get("slides"), list) or not content["slides"]:
-        raise ValueError("bad AI response")
-    return content
+    
+    for attempt in range(retries + 1):
+        try:
+            resp = await ai.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            raw = resp.choices[0].message.content or ""
+            log.info(f"AI response length: {len(raw)}")
+            
+            json_str = extract_json(raw)
+            if not json_str:
+                if attempt < retries:
+                    log.warning(f"No JSON found, retry {attempt + 1}/{retries}")
+                    await asyncio.sleep(1)
+                    continue
+                log.error(f"No JSON in response. Raw: {raw[:500]}")
+                raise ValueError("no JSON in AI response")
+            
+            content = json.loads(json_str)
+            if not isinstance(content.get("slides"), list) or not content["slides"]:
+                if attempt < retries:
+                    log.warning(f"Bad response structure, retry {attempt + 1}/{retries}")
+                    await asyncio.sleep(1)
+                    continue
+                raise ValueError("bad AI response")
+            
+            return content
+        except Exception as e:
+            if attempt < retries:
+                log.warning(f"Request failed, retry {attempt + 1}/{retries}: {e}")
+                await asyncio.sleep(1)
+            else:
+                raise
 
 
 def prepare_image(raw, w=900, h=600):
