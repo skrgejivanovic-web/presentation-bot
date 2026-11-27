@@ -16,7 +16,6 @@ from telegram import (
     Update,
 )
 from telegram.constants import ChatAction
-from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -34,8 +33,16 @@ log = logging.getLogger("presentation-bot")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or None
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+if OPENAI_API_KEY.startswith("gsk_"):
+    DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
+    DEFAULT_MODEL = "openai/gpt-oss-120b"
+else:
+    DEFAULT_BASE_URL = None
+    DEFAULT_MODEL = "gpt-4o-mini"
+
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or DEFAULT_BASE_URL
+OPENAI_MODEL = os.getenv("OPENAI_MODEL") or DEFAULT_MODEL
 PORT = int(os.getenv("PORT", "10000"))
 
 COUNTS = (3, 5, 7, 10, 12, 15)
@@ -108,7 +115,7 @@ async def refresh(q, s):
         await q.edit_message_text(
             settings_text(s), reply_markup=settings_keyboard(s)
         )
-    except BadRequest:
+    except Exception:
         pass
 
 
@@ -243,7 +250,7 @@ async def generate_and_send(update, context, s):
         )
         try:
             await status.edit_text("✅ Презентация готова, файл выше 👆")
-        except BadRequest:
+        except Exception:
             pass
     except Exception:
         log.exception("generation failed")
@@ -252,7 +259,7 @@ async def generate_and_send(update, context, s):
                 "😔 Не получилось создать презентацию. "
                 "Попробуй ещё раз: /start"
             )
-        except BadRequest:
+        except Exception:
             pass
     finally:
         s.busy = False
