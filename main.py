@@ -4,7 +4,10 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt
+from pptx.dml.color import RgbColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
 from openai import OpenAI
 import tempfile
 from aiohttp import web
@@ -20,9 +23,30 @@ client = OpenAI(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Цвета
+DARK_BG = RgbColor(15, 23, 42)       # Тёмно-синий фон
+ACCENT = RgbColor(56, 189, 248)      # Голубой акцент
+WHITE = RgbColor(255, 255, 255)
+LIGHT_GRAY = RgbColor(203, 213, 225)
+
+def set_slide_background(slide, color):
+    background = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, 0, 0,
+        slide.slide_layout.width if hasattr(slide.slide_layout, 'width') else Inches(13.333),
+        Inches(7.5)
+    )
+    background.fill.solid()
+    background.fill.fore_color.rgb = color
+    background.line.fill.background()
+    # Отправляем фигуру на задний план
+    spTree = slide.shapes._spTree
+    sp = background._element
+    spTree.remove(sp)
+    spTree.insert(2, sp)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я бот, который создаёт презентации.\n\n"
+        "Привет! Я бот, который создаёт красивые презентации.\n\n"
         "Просто напиши тему, например:\n"
         "«Искусственный интеллект в образовании»\n\n"
         "Я сделаю презентацию и пришлю файл .pptx"
@@ -35,7 +59,7 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Напиши тему чуть подробнее.")
         return
 
-    await update.message.reply_text("Генерирую презентацию... Подожди 20–40 секунд.")
+    await update.message.reply_text("Генерирую красивую презентацию... Подожди 20–40 секунд.")
 
     try:
         prompt = f"""
@@ -54,7 +78,7 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
 - Пункт 2
 - Пункт 3
 
-Сделай 6-8 слайдов. Первый слайд — титульный.
+Сделай 7-8 слайдов. Первый слайд — титульный (только заголовок).
 """
 
         response = client.chat.completions.create(
@@ -86,30 +110,65 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
         if current_slide:
             slides_data.append(current_slide)
 
+        # === Титульный слайд ===
         if slides_data:
-            slide_layout = prs.slide_layouts[0]
-            slide = prs.slides.add_slide(slide_layout)
-            slide.shapes.title.text = slides_data[0]["title"]
-            if len(slide.placeholders) > 1:
-                slide.placeholders[1].text = "Сгенерировано ИИ-ботом"
+            blank_layout = prs.slide_layouts[6]  # Пустой макет
+            slide = prs.slides.add_slide(blank_layout)
+            set_slide_background(slide, DARK_BG)
 
+            # Заголовок
+            title_box = slide.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(11.7), Inches(1.5))
+            tf = title_box.text_frame
+            tf.word_wrap = True
+            p = tf.paragraphs[0]
+            p.text = slides_data[0]["title"]
+            p.font.size = Pt(40)
+            p.font.bold = True
+            p.font.color.rgb = WHITE
+            p.alignment = PP_ALIGN.CENTER
+
+            # Подзаголовок
+            sub_box = slide.shapes.add_textbox(Inches(0.8), Inches(4.3), Inches(11.7), Inches(0.6))
+            tf = sub_box.text_frame
+            p = tf.paragraphs[0]
+            p.text = "Сгенерировано ИИ-ботом"
+            p.font.size = Pt(18)
+            p.font.color.rgb = ACCENT
+            p.alignment = PP_ALIGN.CENTER
+
+        # === Остальные слайды ===
         for slide_info in slides_data[1:]:
-            slide_layout = prs.slide_layouts[1]
-            slide = prs.slides.add_slide(slide_layout)
-            slide.shapes.title.text = slide_info["title"]
+            blank_layout = prs.slide_layouts[6]
+            slide = prs.slides.add_slide(blank_layout)
+            set_slide_background(slide, DARK_BG)
 
-            body = slide.placeholders[1]
-            tf = body.text_frame
-            tf.clear()
+            # Заголовок слайда
+            title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.4), Inches(12), Inches(1))
+            tf = title_box.text_frame
+            tf.word_wrap = True
+            p = tf.paragraphs[0]
+            p.text = slide_info["title"]
+            p.font.size = Pt(28)
+            p.font.bold = True
+            p.font.color.rgb = ACCENT
+
+            # Пункты
+            content_box = slide.shapes.add_textbox(Inches(0.9), Inches(1.6), Inches(11.5), Inches(5.2))
+            tf = content_box.text_frame
+            tf.word_wrap = True
 
             for i, point in enumerate(slide_info["points"]):
                 if i == 0:
-                    tf.text = point
+                    p = tf.paragraphs[0]
                 else:
                     p = tf.add_paragraph()
-                    p.text = point
-                    p.level = 0
+                p.text = "•  " + point
+                p.font.size = Pt(20)
+                p.font.color.rgb = WHITE
+                p.space_after = Pt(14)
+                p.level = 0
 
+        # Сохраняем
         with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
             prs.save(tmp.name)
             tmp_path = tmp.name
