@@ -26,19 +26,22 @@ STYLES = {
     "тёмный": {
         "bg": RGBColor(15, 23, 42),
         "accent": RGBColor(56, 189, 248),
-        "text": RGBColor(248, 250, 252),
+        "title": RGBColor(255, 255, 255),
+        "text": RGBColor(226, 232, 240),
         "sub": RGBColor(148, 163, 184)
     },
     "светлый": {
         "bg": RGBColor(248, 250, 252),
         "accent": RGBColor(2, 132, 199),
-        "text": RGBColor(15, 23, 42),
+        "title": RGBColor(15, 23, 42),
+        "text": RGBColor(30, 41, 59),
         "sub": RGBColor(100, 116, 139)
     },
     "бизнес": {
         "bg": RGBColor(15, 23, 42),
-        "accent": RGBColor(37, 99, 235),
-        "text": RGBColor(241, 245, 249),
+        "accent": RGBColor(59, 130, 246),
+        "title": RGBColor(255, 255, 255),
+        "text": RGBColor(226, 232, 240),
         "sub": RGBColor(148, 163, 184)
     }
 }
@@ -49,7 +52,7 @@ def set_background(slide, color):
     fill.fore_color.rgb = color
 
 def add_accent_bar(slide, color):
-    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.18), Inches(7.5))
+    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.15), Inches(7.5))
     shape.fill.solid()
     shape.fill.fore_color.rgb = color
     shape.line.fill.background()
@@ -61,44 +64,54 @@ def create_presentation(slides_data, style_name="тёмный"):
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
+    # ===== ТИТУЛЬНЫЙ СЛАЙД =====
     if slides_data:
         slide = prs.slides.add_slide(blank)
         set_background(slide, style["bg"])
         add_accent_bar(slide, style["accent"])
 
-        box = slide.shapes.add_textbox(Inches(1.0), Inches(2.5), Inches(11.3), Inches(2.0))
-        tf = box.text_frame
+        # Большой заголовок
+        title_box = slide.shapes.add_textbox(Inches(0.9), Inches(2.2), Inches(11.5), Inches(2.4))
+        tf = title_box.text_frame
         tf.word_wrap = True
         p = tf.paragraphs[0]
         p.text = slides_data[0]["title"]
-        p.font.size = Pt(40)
+        p.font.size = Pt(44)
         p.font.bold = True
-        p.font.color.rgb = style["text"]
+        p.font.color.rgb = style["title"]
+        p.alignment = PP_ALIGN.LEFT
 
-        line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(1.0), Inches(4.6), Inches(2.5), Inches(0.08))
+        # Акцентная линия
+        line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(4.7), Inches(3.0), Inches(0.09))
         line.fill.solid()
         line.fill.fore_color.rgb = style["accent"]
         line.line.fill.background()
 
-        sub = slide.shapes.add_textbox(Inches(1.0), Inches(5.0), Inches(11), Inches(0.5))
+        # Подпись
+        sub = slide.shapes.add_textbox(Inches(0.9), Inches(5.1), Inches(11), Inches(0.5))
         p = sub.text_frame.paragraphs[0]
-        p.text = f"Стиль: {style_name.capitalize()} • Сгенерировано ИИ"
-        p.font.size = Pt(14)
+        p.text = f"Стиль: {style_name.capitalize()}  •  Сгенерировано ИИ"
+        p.font.size = Pt(15)
         p.font.color.rgb = style["sub"]
 
+    # ===== ОБЫЧНЫЕ СЛАЙДЫ =====
     for info in slides_data[1:]:
         slide = prs.slides.add_slide(blank)
         set_background(slide, style["bg"])
         add_accent_bar(slide, style["accent"])
 
-        title_box = slide.shapes.add_textbox(Inches(0.9), Inches(0.3), Inches(11.5), Inches(0.8))
-        p = title_box.text_frame.paragraphs[0]
+        # Заголовок слайда
+        title_box = slide.shapes.add_textbox(Inches(0.9), Inches(0.35), Inches(11.5), Inches(0.9))
+        tf = title_box.text_frame
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
         p.text = info["title"]
-        p.font.size = Pt(24)
+        p.font.size = Pt(26)
         p.font.bold = True
         p.font.color.rgb = style["accent"]
 
-        body = slide.shapes.add_textbox(Inches(0.9), Inches(1.3), Inches(11.5), Inches(5.5))
+        # Текст
+        body = slide.shapes.add_textbox(Inches(0.9), Inches(1.4), Inches(11.5), Inches(5.4))
         tf = body.text_frame
         tf.word_wrap = True
 
@@ -108,30 +121,30 @@ def create_presentation(slides_data, style_name="тёмный"):
             else:
                 p = tf.add_paragraph()
             p.text = "●   " + point
-            p.font.size = Pt(17)
+            p.font.size = Pt(18)
             p.font.color.rgb = style["text"]
-            p.space_after = Pt(12)
+            p.space_after = Pt(14)
 
     return prs
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я создаю презентации с разными стилями и возможностью редактирования.\n\n"
-        "Как пользоваться:\n"
-        "1. Напиши тему (можно указать стиль):\n"
-        "   стиль светлый\n"
-        "   Искусственный интеллект\n\n"
-        "Доступные стили: тёмный, светлый, бизнес\n\n"
-        "2. Чтобы изменить слайд после создания:\n"
-        "   измени слайд 3\n"
-        "   Новый пункт 1\n"
-        "   Новый пункт 2"
+        "Привет! Просто напиши тему презентации.\n\n"
+        "Можно указать стиль:\n"
+        "стиль светлый\n"
+        "Искусственный интеллект\n\n"
+        "Стили: тёмный, светлый, бизнес\n\n"
+        "После создания можно изменить слайд:\n"
+        "измени слайд 3\n"
+        "Новый пункт 1\n"
+        "Новый пункт 2"
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
+    # Редактирование
     if text.lower().startswith("измени слайд"):
         if user_id not in user_data:
             await update.message.reply_text("Сначала создай презентацию.")
@@ -143,8 +156,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         slide_num = int(match.group(1))
-        lines = text.split("\n")[1:]
-        new_points = [line.strip() for line in lines if line.strip()]
+        new_points = [line.strip() for line in text.split("\n")[1:] if line.strip()]
 
         data = user_data[user_id]
         if slide_num < 1 or slide_num > len(data["slides"]):
@@ -154,11 +166,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if slide_num == 1:
             data["slides"][0]["title"] = new_points[0] if new_points else data["slides"][0]["title"]
         else:
-            data["slides"][slide_num - 1]["points"] = new_points if new_points else data["slides"][slide_num - 1]["points"]
+            data["slides"][slide_num-1]["points"] = new_points or data["slides"][slide_num-1]["points"]
 
         await update.message.reply_text(f"Обновляю слайд {slide_num}...")
-
         prs = create_presentation(data["slides"], data["style"])
+
         with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
             prs.save(tmp.name)
             path = tmp.name
@@ -168,28 +180,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(path)
         return
 
+    # Создание новой презентации
     style = "тёмный"
     topic = text
 
-    for s in STYLES.keys():
+    for s in STYLES:
         if text.lower().startswith(f"стиль {s}"):
             style = s
             topic = text[len(f"стиль {s}"):].strip()
             break
 
-    if not topic or len(topic) < 3:
+    if len(topic) < 3:
         await update.message.reply_text("Напиши тему презентации.")
         return
 
-    await update.message.reply_text(f"Создаю презентацию в стиле «{style}»...")
+    await update.message.reply_text(f"Создаю презентацию («{style}» стиль)...")
 
     try:
-        prompt = f"""
-Создай подробную структуру презентации на русском на тему: "{topic}".
-8–9 слайдов. На каждом 4–6 информативных пунктов.
-Первый слайд — только заголовок.
+        prompt = f"""Создай подробную структуру презентации на русском на тему: "{topic}".
+Сделай 8 слайдов. На каждом слайде 4-6 информативных пунктов.
+Первый слайд — только заголовок темы.
 
-Формат:
+Формат строго:
 СЛАЙД 1: Заголовок
 - Пункт 1
 - Пункт 2
@@ -219,7 +231,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current:
             slides_data.append(current)
 
-        user_data[user_id] = {"slides": slides_data, "style": style, "topic": topic}
+        user_data[user_id] = {"slides": slides_data, "style": style}
 
         prs = create_presentation(slides_data, style)
 
@@ -231,7 +243,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=f,
                 filename=f"{topic[:40]}.pptx",
-                caption=f"Стиль: {style}\nЧтобы изменить слайд:\nизмени слайд 3\nНовый текст"
+                caption=f"Готово! Стиль: {style}\n\nЧтобы изменить слайд:\nизмени слайд 3\nНовый текст"
             )
         os.remove(path)
 
@@ -255,8 +267,7 @@ async def main():
     web_app.router.add_get("/", handle)
     runner = web.AppRunner(web_app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
     await site.start()
 
     await asyncio.Event().wait()
