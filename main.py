@@ -125,19 +125,17 @@ async def generate_presentation(update: Update, context: ContextTypes.DEFAULT_TY
 
     except Exception as e:
         logger.error(f"Ошибка: {e}")
-        await update.message.reply_text("Произошла ошибка. Попробуй ещё раз.")
+        await update.message.reply_text(f"Ошибка: {str(e)}")
 
 async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_presentation))
 
-    # Запускаем бота
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
 
-    # Простой веб-сервер, чтобы Render не убивал процесс
     async def handle(request):
         return web.Response(text="Bot is running")
 
@@ -149,7 +147,6 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    # Держим бота живым
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
