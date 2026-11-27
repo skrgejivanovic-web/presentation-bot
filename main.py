@@ -16,7 +16,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ChatAction
-from telegram.error import TelegramBadRequest
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -108,7 +108,7 @@ async def refresh(q, s):
         await q.edit_message_text(
             settings_text(s), reply_markup=settings_keyboard(s)
         )
-    except TelegramBadRequest:
+    except BadRequest:
         pass
 
 
@@ -241,7 +241,10 @@ async def generate_and_send(update, context, s):
             document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
             caption="✅ Готово! Открывай в PowerPoint или Google Slides.",
         )
-        await status.edit_text("✅ Презентация готова, файл выше 👆")
+        try:
+            await status.edit_text("✅ Презентация готова, файл выше 👆")
+        except BadRequest:
+            pass
     except Exception:
         log.exception("generation failed")
         try:
@@ -249,7 +252,7 @@ async def generate_and_send(update, context, s):
                 "😔 Не получилось создать презентацию. "
                 "Попробуй ещё раз: /start"
             )
-        except TelegramBadRequest:
+        except BadRequest:
             pass
     finally:
         s.busy = False
