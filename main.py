@@ -41,7 +41,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if OPENAI_API_KEY.startswith("gsk_"):
     DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-    DEFAULT_MODEL = "llama-3.3-70b-versatile"
+    DEFAULT_MODEL = "openai/gpt-oss-120b"
 else:
     DEFAULT_BASE_URL = None
     DEFAULT_MODEL = "gpt-4o-mini"
@@ -49,6 +49,16 @@ else:
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or DEFAULT_BASE_URL
 OPENAI_MODEL = os.getenv("OPENAI_MODEL") or DEFAULT_MODEL
 PORT = int(os.getenv("PORT", "10000"))
+
+MODEL_CHAIN = []
+for m in (
+    OPENAI_MODEL,
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+):
+    if m and m not in MODEL_CHAIN:
+        MODEL_CHAIN.append(m)
 
 COUNTS = (3, 5, 7, 10, 12, 15)
 
@@ -300,54 +310,60 @@ PROMPT = (
 
 def extract_json(text):
     text = text.strip()
-    code_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+    code_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if code_match:
         text = code_match.group(1)
-    start = text.find('{')
-    end = text.rfind('}')
+    start = text.find("{")
+    end = text.rfind("}")
     if start == -1 or end == -1 or start >= end:
         return None
-    return text[start:end + 1]
+    return text[start : end + 1]
 
 
-async def ask_ai(s, retries=2):
+async def ask_ai(s):
     lang = "Russian" if s.lang == "ru" else "English"
     prompt = PROMPT.format(lang=lang, count=s.count, topic=s.topic)
-    
-    for attempt in range(retries + 1):
-        try:
-            resp = await ai.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-            )
-            raw = resp.choices[0].message.content or ""
-            log.info(f"AI response length: {len(raw)}")
-            
-            json_str = extract_json(raw)
-            if not json_str:
-                if attempt < retries:
-                    log.warning(f"No JSON found, retry {attempt + 1}/{retries}")
-                    await asyncio.sleep(1)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a presentation writer. You reply only "
+                       "with valid JSON, without markdown and comments.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+    last_error = None
+    for model in MODEL_CHAIN:
+        for use_format in (True, False):
+            try:
+                kwargs = {"model": model, "messages": messages}
+                if use_format:
+                    kwargs["response_format"] = {"type": "json_object"}
+                resp = await ai.chat.completions.create(**kwargs)
+                raw = resp.choices[0].message.content or ""
+                json_str = extract_json(raw)
+                if not json_str:
+                    last_error = ValueError(
+                        f"{model}: no JSON ({len(raw)} chars)"
+                    )
+                    log.warning(str(last_error))
                     continue
-                log.error(f"No JSON in response. Raw: {raw[:500]}")
-                raise ValueError("no JSON in AI response")
-            
-            content = json.loads(json_str)
-            if not isinstance(content.get("slides"), list) or not content["slides"]:
-                if attempt < retries:
-                    log.warning(f"Bad response structure, retry {attempt + 1}/{retries}")
-                    await asyncio.sleep(1)
+                content = json.loads(json_str)
+                if not isinstance(content.get("slides"), list):
+                    last_error = ValueError(f"{model}: no slides list")
+                    log.warning(str(last_error))
                     continue
-                raise ValueError("bad AI response")
-            
-            return content
-        except Exception as e:
-            if attempt < retries:
-                log.warning(f"Request failed, retry {attempt + 1}/{retries}: {e}")
-                await asyncio.sleep(1)
-            else:
-                raise
+                if not content["slides"]:
+                    last_error = ValueError(f"{model}: empty slides")
+                    log.warning(str(last_error))
+                    continue
+                log.info("AI model used: %s (json_mode=%s)",
+                         model, use_format)
+                return content
+            except Exception as e:
+                last_error = e
+                log.warning("Model %s json_mode=%s failed: %s",
+                            model, use_format, e)
+    raise last_error
 
 
 def prepare_image(raw, w=900, h=600):
@@ -667,11 +683,15 @@ async def generate_and_send(update, context, s):
             await status.edit_text("✅ Презентация готова, файл выше 👆")
         except Exception:
             pass
-    except Exception:
+    except Exception as e:
         log.exception("generation failed")
+        reason = f"{type(e).__name__}: {e}"
+        if len(reason) > 300:
+            reason = reason[:300] + "…"
         try:
             await status.edit_text(
-                "😔 Не получилось создать презентацию. "
+                "😔 Не получилось создать презентацию.\n"
+                f"Причина: {reason}\n\n"
                 "Попробуй ещё раз: /start"
             )
         except Exception:
@@ -699,6 +719,7 @@ async def main():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     log.info("Bot started (polling)")
+    log.info("Model chain: %s", MODEL_CHAIN)
 
     webapp = web.Application()
     webapp.router.add_get("/", health)
