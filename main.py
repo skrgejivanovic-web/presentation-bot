@@ -64,6 +64,7 @@ COUNTS = (3, 5, 7, 10, 12, 15)
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 WIKI_API = "https://ru.wikipedia.org/w/api.php"
+OPENVERSE_API = "https://api.openverse.org/v1/images/"
 HTTP_HEADERS = {"User-Agent": "presentation-bot/1.0 (telegram bot)"}
 
 PALETTE_NAMES = {
@@ -306,8 +307,8 @@ PROMPT = (
     '"img" (3-5 ENGLISH words describing a photo for this slide), '
     '"bullets" (array of 5-6 informative strings, each 8-18 words), '
     '"fact" (one surprising fact, quote or witty remark about the slide '
-    'topic), "scheme" (array of 3-4 short step names, include ONLY if the '
-    "slide explains a process, otherwise omit)), "
+    'topic), "scheme" (array of 3-4 SHORT NON-EMPTY step names, include '
+    "ONLY if the slide explains a process, otherwise omit)), "
     '"stats" (array of 3 objects with "value" (short number or percent) '
     'and "label" (short description), striking real-world statistics), '
     '"conclusion" (2-3 inspiring sentences). '
@@ -459,7 +460,7 @@ async def _download_image(sess, url):
 
 
 async def fetch_topic_image(query):
-    timeout = aiohttp.ClientTimeout(total=20)
+    timeout = aiohttp.ClientTimeout(total=10, connect=5)
     async with aiohttp.ClientSession(timeout=timeout,
                                      headers=HTTP_HEADERS) as sess:
         try:
@@ -484,6 +485,7 @@ async def fetch_topic_image(query):
                 if url and mime in ("image/jpeg", "image/png"):
                     img = await _download_image(sess, url)
                     if img:
+                        log.info("image from commons: %s", query)
                         return img
         except Exception as e:
             log.warning("commons search failed for %s: %s", query, e)
@@ -507,16 +509,32 @@ async def fetch_topic_image(query):
                 if url:
                     img = await _download_image(sess, url)
                     if img:
+                        log.info("image from wikipedia: %s", query)
                         return img
         except Exception as e:
             log.warning("wiki image failed for %s: %s", query, e)
         try:
+            async with sess.get(OPENVERSE_API,
+                                params={"q": query, "page_size": "3"}) as r:
+                if r.status == 200:
+                    data = await r.json(content_type=None)
+                    for res in (data.get("results") or []):
+                        url = res.get("url") or ""
+                        if url:
+                            img = await _download_image(sess, url)
+                            if img:
+                                log.info("image from openverse: %s", query)
+                                return img
+        except Exception as e:
+            log.warning("openverse failed for %s: %s", query, e)
+        try:
             tags = re.sub(r"[^a-zA-Z0-9]+", ",", query or "")[:60]
             tags = tags.strip(",") or "topic"
             img = await _download_image(
-                sess, f"https://loremflickr.com/900/600/{tags}"
+                sess, f"https://loremflickr.com/900/600/{tags}/all"
             )
             if img:
+                log.info("image from loremflickr: %s", query)
                 return img
         except Exception as e:
             log.warning("loremflickr failed for %s: %s", query, e)
@@ -553,13 +571,33 @@ def add_text(slide, x, y, w, h, text, size, color, bold=False,
     return tb
 
 
+def add_numbered_title(slide, x, y, w, h, number, text, size, pal):
+    tb = slide.shapes.add_textbox(x, y, w, h)
+    tf = tb.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    r1 = p.add_run()
+    r1.text = f"{number}  "
+    r1.font.size = Pt(size)
+    r1.font.bold = True
+    r1.font.color.rgb = pal["accent"]
+    r1.font.name = pal["hfont"]
+    r2 = p.add_run()
+    r2.text = text
+    r2.font.size = Pt(size)
+    r2.font.bold = True
+    r2.font.color.rgb = pal["text"]
+    r2.font.name = pal["hfont"]
+    return tb
+
+
 def add_picture(slide, img, x, y, w, h, pal):
     add_rect(slide, x - Inches(0.07), y - Inches(0.07),
              w + Inches(0.14), h + Inches(0.14), pal["accent"])
     slide.shapes.add_picture(io.BytesIO(img), x, y, width=w, height=h)
 
 
-def clean_bullets(raw):
+def clean_bullets(raw, limit=5):
     out = []
     for b in raw or []:
         t = str(b).strip()
@@ -567,27 +605,39 @@ def clean_bullets(raw):
         if len(t) < 3 or t in (",", "."):
             continue
         out.append(t[:240])
-        if len(out) >= 6:
+        if len(out) >= limit:
             break
     return out
 
 
-def add_bullets(slide, x, y, w, h, bullets, pal):
+def clean_scheme(raw):
+    out = []
+    for x in raw or []:
+        t = str(x).strip()
+        t = t.strip("\"'“”«»`)")
+        if len(t) > 1:
+            out.append(t[:60])
+        if len(out) >= 4:
+            break
+    return out
+
+
+def add_bullets(slide, x, y, w, h, bullets, pal, size=20):
     tb = slide.shapes.add_textbox(x, y, w, h)
     tf = tb.text_frame
     tf.word_wrap = True
     for i, b in enumerate(bullets):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_after = Pt(12)
+        p.space_after = Pt(14)
         r1 = p.add_run()
         r1.text = "▸ "
-        r1.font.size = Pt(18)
+        r1.font.size = Pt(size)
         r1.font.bold = True
         r1.font.color.rgb = pal["accent"]
         r1.font.name = pal["bfont"]
         r2 = p.add_run()
         r2.text = str(b)
-        r2.font.size = Pt(18)
+        r2.font.size = Pt(size)
         r2.font.color.rgb = pal["text"]
         r2.font.name = pal["bfont"]
     return tb
@@ -602,26 +652,26 @@ def add_scheme(slide, steps, pal, top):
     for i, step in enumerate(steps[:4]):
         x = start + i * (box_w + gap)
         box = add_rect(
-            slide, x, top, box_w, Inches(1.15),
+            slide, x, top, box_w, Inches(1.2),
             pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE,
         )
         box.line.color.rgb = pal["accent"]
-        box.line.width = Pt(1.25)
+        box.line.width = Pt(1.5)
         tf = box.text_frame
         tf.word_wrap = True
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        tf.margin_left = Inches(0.1)
-        tf.margin_right = Inches(0.1)
+        tf.margin_left = Inches(0.12)
+        tf.margin_right = Inches(0.12)
         p = tf.paragraphs[0]
         p.text = f"{i + 1}. {step}"
         p.alignment = PP_ALIGN.CENTER
-        p.font.size = Pt(14)
+        p.font.size = Pt(16)
         p.font.bold = True
         p.font.color.rgb = pal["text"]
         p.font.name = pal["bfont"]
         if i < n - 1:
             add_rect(
-                slide, x + box_w + Inches(0.05), top + Inches(0.42),
+                slide, x + box_w + Inches(0.05), top + Inches(0.45),
                 Inches(0.35), Inches(0.3), pal["accent"],
                 MSO_SHAPE.RIGHT_ARROW,
             )
@@ -635,81 +685,113 @@ def add_title_slide(prs, content, pal, s, img):
     add_rect(slide, Inches(10.4), Inches(-2.2), Inches(5.0), Inches(5.0),
              pal["accent"], MSO_SHAPE.OVAL)
     tw = Inches(7.4) if img else Inches(11.3)
-    add_text(slide, Inches(1.0), Inches(2.1), tw, Inches(1.7),
-             str(content.get("title") or s.topic), 42, pal["text"],
+    add_text(slide, Inches(1.0), Inches(1.9), tw, Inches(1.9),
+             str(content.get("title") or s.topic), 52, pal["text"],
              bold=True, font=pal["hfont"])
-    add_rect(slide, Inches(1.05), Inches(3.85), Inches(3.0), Inches(0.08),
+    add_rect(slide, Inches(1.05), Inches(3.85), Inches(3.2), Inches(0.09),
              pal["accent"])
-    add_text(slide, Inches(1.05), Inches(4.1), tw, Inches(0.7),
-             str(content.get("subtitle") or ""), 20, pal["muted"],
+    add_text(slide, Inches(1.05), Inches(4.1), tw, Inches(0.8),
+             str(content.get("subtitle") or ""), 24, pal["muted"],
              font=pal["bfont"])
     intro = str(content.get("intro") or "")
     if intro:
-        add_text(slide, Inches(1.05), Inches(4.9), tw, Inches(1.0),
-                 intro, 16, pal["accent"], italic=True, font=pal["bfont"])
+        add_text(slide, Inches(1.05), Inches(5.0), tw, Inches(1.1),
+                 intro, 20, pal["accent"], italic=True, font=pal["bfont"])
     if img:
-        add_picture(slide, img, Inches(8.9), Inches(2.4),
-                    Inches(3.7), Inches(2.8), pal)
+        add_picture(slide, img, Inches(8.8), Inches(2.2),
+                    Inches(3.8), Inches(2.9), pal)
 
 
-def add_content_slide(prs, item, pal, num, img):
+def add_agenda_slide(prs, titles, pal):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
     add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
-             str(item.get("title") or ""), 34, pal["text"], bold=True,
-             font=pal["hfont"])
-    add_rect(slide, Inches(0.62), Inches(1.3), Inches(2.4), Inches(0.07),
+             "Что внутри", 40, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
              pal["accent"])
-    lead = str(item.get("lead") or "")
-    if lead:
-        add_text(slide, Inches(0.62), Inches(1.5), Inches(12.1),
-                 Inches(0.6), lead, 16, pal["muted"], italic=True,
-                 font=pal["bfont"])
-    scheme = item.get("scheme") or []
-    bullets = clean_bullets(item.get("bullets"))
-    wide = Inches(12.0)
-    if img and not scheme:
-        wide = Inches(8.2)
-        add_picture(slide, img, Inches(9.35), Inches(2.1),
-                    Inches(3.4), Inches(2.55), pal)
-    if scheme:
-        add_bullets(slide, Inches(0.65), Inches(2.15), wide,
-                    Inches(2.0), bullets[:4], pal)
-        add_scheme(slide, scheme, pal, Inches(4.4))
-    else:
-        add_bullets(slide, Inches(0.65), Inches(2.15), wide,
-                    Inches(3.7), bullets, pal)
-    fact = str(item.get("fact") or "")
-    if fact:
-        add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(0.95),
-                 pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
-        add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.09), Inches(0.95),
-                 pal["accent"])
-        add_text(slide, Inches(0.9), Inches(6.28), Inches(11.6), Inches(0.6),
-                 "💡 " + fact, 14, pal["text"], italic=True,
-                 font=pal["bfont"])
-    add_text(slide, Inches(12.5), Inches(7.05), Inches(0.7), Inches(0.35),
-             str(num), 10, pal["muted"], align=PP_ALIGN.RIGHT,
-             font=pal["bfont"])
+    tb = slide.shapes.add_textbox(Inches(0.65), Inches(1.9),
+                                  Inches(12.0), Inches(5.1))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    for i, t in enumerate(titles[:8]):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.space_after = Pt(16)
+        r1 = p.add_run()
+        r1.text = f"{i + 1:02d}  "
+        r1.font.size = Pt(22)
+        r1.font.bold = True
+        r1.font.color.rgb = pal["accent"]
+        r1.font.name = pal["hfont"]
+        r2 = p.add_run()
+        r2.text = str(t)
+        r2.font.size = Pt(22)
+        r2.font.color.rgb = pal["text"]
+        r2.font.name = pal["bfont"]
 
 
-def add_stats_slide(prs, stats, pal):
+def add_content_slide(prs, item, pal, num, total, img):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    add_text(slide, Inches(0.6), Inches(0.5), Inches(12.1), Inches(0.9),
-             "Цифры и факты", 34, pal["text"], bold=True, font=pal["hfont"])
+    add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1),
+                       Inches(1.0), f"{num - 1:02d}",
+                       str(item.get("title") or ""), 40, pal)
+    add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08),
+             pal["accent"])
+    lead = str(item.get("lead") or "")
+    if lead:
+        add_text(slide, Inches(0.62), Inches(1.62), Inches(12.1),
+                 Inches(0.6), lead, 19, pal["muted"], italic=True,
+                 font=pal["bfont"])
+    scheme = clean_scheme(item.get("scheme"))
+    bullets = clean_bullets(item.get("bullets"), 5)
+    wide = Inches(12.0)
+    if img and not scheme:
+        wide = Inches(8.2)
+        bullets = bullets[:4]
+        add_picture(slide, img, Inches(9.3), Inches(2.25),
+                    Inches(3.45), Inches(2.6), pal)
+    if scheme:
+        add_bullets(slide, Inches(0.65), Inches(2.3), wide,
+                    Inches(2.0), bullets[:3], pal, size=19)
+        add_scheme(slide, scheme, pal, Inches(4.55))
+    else:
+        add_bullets(slide, Inches(0.65), Inches(2.3), wide,
+                    Inches(3.6), bullets, pal)
+    fact = str(item.get("fact") or "")
+    if fact:
+        add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(1.0),
+                 pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
+        add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.1), Inches(1.0),
+                 pal["accent"])
+        add_text(slide, Inches(0.95), Inches(6.3), Inches(11.5),
+                 Inches(0.65), "💡 " + fact, 17, pal["text"], italic=True,
+                 font=pal["bfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
+             f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT,
+             font=pal["bfont"])
+
+
+def add_stats_slide(prs, stats, pal, num, total):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(slide, pal["bg"])
+    add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
+    add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
+    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
+             "Цифры и факты", 40, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
+             pal["accent"])
     n = min(len(stats), 3)
     card_w = Inches(3.7)
     gap = Inches(0.45)
-    total = n * card_w + (n - 1) * gap
-    start = int((prs.slide_width - total) / 2)
+    total_w = n * card_w + (n - 1) * gap
+    start = int((prs.slide_width - total_w) / 2)
     for i, st in enumerate(stats[:3]):
         x = start + i * (card_w + gap)
-        add_rect(slide, x, Inches(2.2), card_w, Inches(2.8), pal["panel"],
+        add_rect(slide, x, Inches(2.1), card_w, Inches(3.0), pal["panel"],
                  MSO_SHAPE.ROUNDED_RECTANGLE)
         if isinstance(st, dict):
             value = str(st.get("value", ""))
@@ -717,27 +799,33 @@ def add_stats_slide(prs, stats, pal):
         else:
             value = str(st)
             label = ""
-        add_text(slide, x + Inches(0.2), Inches(2.7), card_w - Inches(0.4),
-                 Inches(1.0), value, 44, pal["accent"], bold=True,
+        add_text(slide, x + Inches(0.2), Inches(2.6), card_w - Inches(0.4),
+                 Inches(1.2), value, 54, pal["accent"], bold=True,
                  align=PP_ALIGN.CENTER, font=pal["hfont"])
-        add_text(slide, x + Inches(0.2), Inches(3.8), card_w - Inches(0.4),
-                 Inches(1.0), label, 15, pal["muted"], align=PP_ALIGN.CENTER,
-                 font=pal["bfont"])
+        add_text(slide, x + Inches(0.2), Inches(3.9), card_w - Inches(0.4),
+                 Inches(1.0), label, 18, pal["muted"],
+                 align=PP_ALIGN.CENTER, font=pal["bfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
+             f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT,
+             font=pal["bfont"])
 
 
-def add_final_slide(prs, content, pal):
+def add_final_slide(prs, content, pal, num, total):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["accent2"])
     add_rect(slide, Inches(-1.4), Inches(-1.8), Inches(4.5), Inches(4.5),
              pal["accent"], MSO_SHAPE.OVAL)
     add_rect(slide, Inches(10.6), Inches(5.0), Inches(4.5), Inches(4.5),
              pal["bg"], MSO_SHAPE.OVAL)
-    add_text(slide, Inches(1.2), Inches(2.0), Inches(10.9), Inches(1.6),
-             str(content.get("conclusion") or ""), 24, WHITE,
+    add_text(slide, Inches(1.2), Inches(1.9), Inches(10.9), Inches(1.7),
+             str(content.get("conclusion") or ""), 28, WHITE,
              align=PP_ALIGN.CENTER, font=pal["bfont"])
-    add_text(slide, Inches(1.2), Inches(3.8), Inches(10.9), Inches(1.4),
-             "СПАСИБО ЗА ВНИМАНИЕ!", 46, WHITE, bold=True,
+    add_text(slide, Inches(1.2), Inches(3.8), Inches(10.9), Inches(1.6),
+             "СПАСИБО ЗА ВНИМАНИЕ!", 56, WHITE, bold=True,
              align=PP_ALIGN.CENTER, font=pal["hfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
+             f"{num} / {total}", 12, WHITE, align=PP_ALIGN.RIGHT,
+             font=pal["bfont"])
 
 
 def build_pptx(content, s, slide_imgs, title_img):
@@ -749,18 +837,21 @@ def build_pptx(content, s, slide_imgs, title_img):
     hfont, bfont = THEME_FONTS.get(key, ("Trebuchet MS", "Calibri"))
     pal["hfont"] = hfont
     pal["bfont"] = bfont
-    add_title_slide(prs, content, pal, s, title_img)
-    num = 2
     slides = content.get("slides", [])[: s.count]
+    stats = content.get("stats") or []
+    has_stats = isinstance(stats, list) and bool(stats)
+    total = 2 + len(slides) + (1 if has_stats else 0) + 1
+    add_title_slide(prs, content, pal, s, title_img)
+    add_agenda_slide(prs, [it.get("title", "") for it in slides], pal)
+    num = 3
     for i, item in enumerate(slides):
         img = slide_imgs[i] if i < len(slide_imgs) else None
-        add_content_slide(prs, item, pal, num, img)
+        add_content_slide(prs, item, pal, num, total, img)
         num += 1
-    stats = content.get("stats") or []
-    if isinstance(stats, list) and stats:
-        add_stats_slide(prs, stats, pal)
+    if has_stats:
+        add_stats_slide(prs, stats, pal, num, total)
         num += 1
-    add_final_slide(prs, content, pal)
+    add_final_slide(prs, content, pal, num, total)
     buf = io.BytesIO()
     prs.save(buf)
     return buf.getvalue()
@@ -784,15 +875,24 @@ async def generate_and_send(update, context, s):
         fetched = 0
         for item in slides:
             img = None
-            if fetched < 5:
+            if fetched < 8:
                 query = str(item.get("img") or item.get("title") or s.topic)
-                img = await fetch_topic_image(query)
+                try:
+                    img = await asyncio.wait_for(
+                        fetch_topic_image(query), 12
+                    )
+                except Exception:
+                    img = None
                 if img:
                     fetched += 1
             slide_imgs.append(img)
-        title_img = await fetch_topic_image(
-            str(content.get("img") or s.topic)
-        )
+        title_img = None
+        try:
+            title_img = await asyncio.wait_for(
+                fetch_topic_image(str(content.get("img") or s.topic)), 12
+            )
+        except Exception:
+            title_img = None
         data = build_pptx(content, s, slide_imgs, title_img)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
