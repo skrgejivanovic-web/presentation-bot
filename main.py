@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "9"
+VER = "10"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -144,12 +144,12 @@ THEME_KEYWORDS = (
     (("спорт", "футбол", "фитнес", "олимп", "хокке", "баскетбол", "sport", "fitness", "soccer", "football"), "sport"),
     (("искусств", "культур", "музык", "театр", "дизайн", "живопис", "artist", "culture", "music", "theater", "design", "paint"), "art"),
     (("еда", "кулинар", "рецепт", "готов", "блюдо", "ужин", "обед", "завтрак", "food", "cook", "recipe", "dinner", "lunch", "breakfast"), "food"),
-    (("путешеств", "туризм", "отпуск", "стран", "город", "travel", "tourism", "vacation", "country", "city"), "travel"),
+    (("путешеств", "туризм", "отпуск", "стран", "travel", "tourism", "vacation", "country"), "travel"),
     (("истор", "древн", "войн", "импер", "цар", "history", "ancient", "war", "empire"), "history"),
     (("наук", "физик", "хим", "биолог", "математ", "science", "physics", "chemistry", "biology", "math"), "science"),
-    (("игр", "геймер", "видеоигр", "компьютерн", "gaming", "game", "gamer", "video"), "gaming"),
-    (("мод", "стиль", "одежд", "мода", "fashion", "style", "clothing"), "fashion"),
-    (("авто", "машин", "автомобил", "транспорт", "auto", "car", "vehicle", "transport"), "auto"),
+    (("игр", "геймер", "видеоигр", "gaming", "game", "gamer", "video"), "gaming"),
+    (("мод", "стиль", "одежд", "fashion", "clothing"), "fashion"),
+    (("авто", "машин", "автомобил", "транспорт", "auto", "car", "vehicle"), "auto"),
     (("недвижим", "дом", "квартир", "аренд", "real estate", "house", "apartment", "rent"), "real_estate"),
     (("психолог", "мозг", "сознан", "эмоц", "psychology", "brain", "mind", "emotion"), "psychology"),
 )
@@ -167,6 +167,9 @@ class Session:
         self.style = "auto"
         self.busy = False
         self.last_content = None
+        self.last_imgs = None
+        self.last_title_img = None
+        self.editing_slide = None
 
 
 sessions = {}
@@ -283,10 +286,27 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    s = get_session(update.effective_user.id)
+    s.editing_slide = None
+    await update.message.reply_text("❌ Отменено")
+
+
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s = get_session(update.effective_user.id)
     text = (update.message.text or "").strip()
     if not text:
+        return
+    if s.editing_slide:
+        if s.last_content and 1 <= s.editing_slide <= len(
+            s.last_content.get("slides", [])
+        ):
+            s.last_content["slides"][s.editing_slide - 1]["title"] = text[:120]
+            s.editing_slide = None
+            await rebuild_and_send(update, context, s)
+        else:
+            s.editing_slide = None
+            await update.message.reply_text("❌ Слайд не найден, отменено")
         return
     if s.busy:
         await update.message.reply_text(
@@ -322,6 +342,21 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await refresh(q, s)
 
+    elif data.startswith("edit:"):
+        if not s.last_content:
+            await q.answer("Сначала создай презентацию")
+            return
+        try:
+            s.editing_slide = int(data.split(":", 1)[1])
+        except ValueError:
+            await q.answer("Ошибка")
+            return
+        await q.answer()
+        await q.message.reply_text(
+            f"✏️ Напиши новый заголовок для слайда {s.editing_slide} "
+            "(или /cancel)"
+        )
+
     elif data == "go":
         if s.busy:
             await q.answer("Уже генерирую, подожди 🙂")
@@ -332,41 +367,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await q.edit_message_text(
             f"⏳ Рисую «{s.topic}» ({s.count} слайдов, "
-            f"{style_label(s)})…\nПодбираю картинки и диаграммы, "
-            "это займёт до пары минут."
+            f"{style_label(s)})…"
         )
         await generate_and_send(update, context, s)
-
-    elif data.startswith("edit:"):
-        try:
-            slide_num = int(data.split(":", 1)[1])
-        except ValueError:
-            await q.answer("Ошибка номера слайда")
-            return
-        s.editing_slide = slide_num
-        await q.answer(f"Напиши новый текст для слайда {slide_num}")
-        await q.edit_message_text(
-            f"✏️ Отправь новый текст для слайда {slide_num} "
-            f"(или /cancel для отмены)"
-        )
-
-
-async def on_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    s = get_session(update.effective_user.id)
-    if not hasattr(s, 'editing_slide') or not s.editing_slide:
-        return
-    text = (update.message.text or "").strip()
-    if text == "/cancel":
-        s.editing_slide = None
-        await update.message.reply_text("❌ Редактирование отменено")
-        return
-    slide_num = s.editing_slide
-    if s.last_content and slide_num <= len(s.last_content.get("slides", [])):
-        s.last_content["slides"][slide_num - 1]["title"] = text[:100]
-        s.editing_slide = None
-        await update.message.reply_text(f"✅ Слайд {slide_num} обновлён")
-    else:
-        await update.message.reply_text("❌ Слайд не найден")
 
 
 PROMPT = (
@@ -377,18 +380,15 @@ PROMPT = (
     '"intro" (1-2 catchy sentences), '
     '"slides" (array of exactly {count} objects, each with: "title" '
     '(string), "lead" (one engaging sentence), '
-    '"img" (3-5 ENGLISH words with the main subject first, describing a '
-    'photo for this slide), '
+    '"img" (3-5 ENGLISH words with the main subject first), '
     '"bullets" (array of 5-6 NON-EMPTY informative strings, each 8-18 '
     'words), '
-    '"fact" (one surprising fact, quote or witty remark about the slide '
-    'topic), '
+    '"fact" (one surprising fact or witty remark), '
     '"stats" (array of 3 objects with "value" (short number or percent) '
-    'and "label" (short description), striking real-world statistics), '
+    'and "label" (short description)), '
     '"chart" (object with "title" (string), "type" ("pie" or "bar"), '
     '"data" (array of 4-6 objects with "label" (short string) and '
-    '"value" (number; use percents 0-100 when type is pie)), realistic '
-    'statistics about the topic), '
+    '"value" (number; percents 0-100 when type is pie))), '
     '"conclusion" (2-3 inspiring sentences). '
     "Write EVERY string strictly in {lang}, never mix languages. "
     "Topic: {topic}"
@@ -429,18 +429,13 @@ async def ask_ai(s):
                 raw = resp.choices[0].message.content or ""
                 json_str = extract_json(raw)
                 if not json_str:
-                    last_error = ValueError(
-                        f"{model}: no JSON ({len(raw)} chars)"
-                    )
+                    last_error = ValueError(f"{model}: no JSON")
                     log.warning(str(last_error))
                     continue
                 content = json.loads(json_str)
-                if not isinstance(content.get("slides"), list):
-                    last_error = ValueError(f"{model}: no slides list")
-                    log.warning(str(last_error))
-                    continue
-                if not content["slides"]:
-                    last_error = ValueError(f"{model}: empty slides")
+                if not isinstance(content.get("slides"), list) or \
+                        not content["slides"]:
+                    last_error = ValueError(f"{model}: bad slides")
                     log.warning(str(last_error))
                     continue
                 log.info("AI model used: %s (json_mode=%s)",
@@ -465,7 +460,7 @@ async def fallback_content(s):
         "exintro": "1",
         "explaintext": "1",
     }
-    timeout = aiohttp.ClientTimeout(total=20)
+    timeout = aiohttp.ClientTimeout(total=15)
     async with aiohttp.ClientSession(timeout=timeout,
                                      headers=HTTP_HEADERS) as sess:
         async with sess.get(WIKI_API, params=params) as r:
@@ -551,7 +546,7 @@ async def _download_image(sess, url):
 
 
 async def fetch_topic_image(query):
-    timeout = aiohttp.ClientTimeout(total=10, connect=5)
+    timeout = aiohttp.ClientTimeout(total=5, connect=3)
     async with aiohttp.ClientSession(timeout=timeout,
                                      headers=HTTP_HEADERS) as sess:
         try:
@@ -581,7 +576,7 @@ async def fetch_topic_image(query):
                         log.info("image from commons: %s", query)
                         return img
         except Exception as e:
-            log.warning("commons search failed for %s: %s", query, e)
+            log.warning("commons failed for %s: %s", query, e)
         try:
             params = {
                 "action": "query",
@@ -623,6 +618,31 @@ async def fetch_topic_image(query):
         except Exception as e:
             log.warning("openverse failed for %s: %s", query, e)
     return None
+
+
+async def fetch_images_parallel(queries, limit=4):
+    tasks = []
+    for i, q in enumerate(queries):
+        if i >= limit or not q:
+            continue
+        tasks.append(fetch_topic_image(q))
+    
+    if not tasks:
+        return [None] * len(queries)
+    
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    out = []
+    for r in results:
+        if isinstance(r, BaseException):
+            out.append(None)
+        else:
+            out.append(r)
+    
+    while len(out) < len(queries):
+        out.append(None)
+    
+    return out
 
 
 def set_bg(slide, color):
@@ -685,7 +705,7 @@ def clean_bullets(raw, limit=5):
     out = []
     for b in raw or []:
         t = str(b).strip()
-        t = t.strip("\"'“”«»`)")
+        t = t.strip("\"'""«»`)")
         if len(t) < 3 or t in (",", "."):
             continue
         out.append(t[:240])
@@ -713,6 +733,23 @@ def add_bullets(slide, x, y, w, h, bullets, pal, size=20):
         r2.font.color.rgb = pal["text"]
         r2.font.name = pal["bfont"]
     return tb
+
+
+def chart_rows(chart):
+    rows = []
+    for d in (chart or {}).get("data") or []:
+        if not isinstance(d, dict):
+            continue
+        label = str(d.get("label", "")).strip()[:40]
+        try:
+            value = float(d.get("value", 0))
+        except (TypeError, ValueError):
+            continue
+        if label:
+            rows.append((label, value))
+        if len(rows) >= 6:
+            break
+    return rows if len(rows) >= 2 else []
 
 
 def add_title_slide(prs, content, pal, s, img):
@@ -785,8 +822,7 @@ def add_content_slide(prs, item, pal, num, total, img):
                  Inches(0.6), lead, 19, pal["muted"], italic=True,
                  font=pal["bfont"])
     bullets = clean_bullets(item.get("bullets"), 5)
-    rich = bool(img) or len(bullets) >= 4
-    bsize = 20 if rich else 24
+    bsize = 20 if (img or len(bullets) >= 4) else 24
     wide = Inches(12.0)
     if img:
         wide = Inches(8.2)
@@ -905,31 +941,13 @@ def add_final_slide(prs, content, pal, num, total):
              font=pal["bfont"])
 
 
-def chart_rows(chart):
-    rows = []
-    for d in (chart or {}).get("data") or []:
-        if not isinstance(d, dict):
-            continue
-        label = str(d.get("label", "")).strip()[:40]
-        try:
-            value = float(d.get("value", 0))
-        except (TypeError, ValueError):
-            continue
-        if label:
-            rows.append((label, value))
-        if len(rows) >= 6:
-            break
-    return rows if len(rows) >= 2 else []
-
-
 def build_pptx(content, s, slide_imgs, title_img):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    prs.core_properties.title = content.get("title", s.topic)
+    prs.core_properties.title = str(content.get("title") or s.topic)
     prs.core_properties.subject = s.topic
     prs.core_properties.author = "Presentation Bot"
-    prs.core_properties.created = datetime.now()
     key = resolve_style(s)
     pal = dict(PALETTES.get(key, PALETTES["dark"]))
     hfont, bfont = THEME_FONTS.get(key, ("Trebuchet MS", "Calibri"))
@@ -961,12 +979,49 @@ def build_pptx(content, s, slide_imgs, title_img):
     return buf.getvalue()
 
 
+def edit_keyboard(count):
+    rows = []
+    row = []
+    for i in range(1, min(count, 8) + 1):
+        row.append(
+            InlineKeyboardButton(text=str(i), callback_data=f"edit:{i}")
+        )
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows)
+
+
+async def rebuild_and_send(update, context, s):
+    if not s.last_content or not s.last_imgs:
+        await update.message.reply_text("❌ Нет данных для пересборки")
+        return
+    
+    chat_id = update.effective_chat.id
+    try:
+        data = build_pptx(s.last_content, s, s.last_imgs, s.last_title_img)
+        name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
+        name = name or "presentation"
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
+            caption="✅ Слайд обновлён, новый файл выше 👆",
+        )
+    except Exception as e:
+        log.exception("rebuild failed")
+        await update.message.reply_text(f"😔 Ошибка пересборки: {e}")
+
+
 async def generate_and_send(update, context, s):
     chat_id = update.effective_chat.id
     status = update.effective_message
     s.busy = True
+    t0 = time.monotonic()
     try:
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        await status.edit_text("🧠 Пишу текст…")
         source = "AI"
         try:
             content = await ask_ai(s)
@@ -976,50 +1031,41 @@ async def generate_and_send(update, context, s):
             source = "wiki"
         s.last_content = content
         slides = content.get("slides", [])[: s.count]
-        slide_imgs = []
-        fetched = 0
-        deadline = time.monotonic() + 60
-        for item in slides:
-            img = None
-            if fetched < 8 and time.monotonic() < deadline:
-                query = str(item.get("img") or item.get("title") or s.topic)
-                try:
-                    img = await asyncio.wait_for(
-                        fetch_topic_image(query), 12
-                    )
-                except Exception:
-                    img = None
-                if img:
-                    fetched += 1
-            slide_imgs.append(img)
+        await status.edit_text("🖼 Ищу фото (параллельно)…")
+        queries = [str(it.get("img") or it.get("title") or s.topic)
+                   for it in slides]
+        slide_imgs = await fetch_images_parallel(queries, limit=4)
         title_img = None
         try:
-            title_img = await asyncio.wait_for(
-                fetch_topic_image(str(content.get("img") or s.topic)), 12
+            res = await fetch_images_parallel(
+                [str(content.get("img") or s.topic)], limit=1
             )
+            title_img = res[0] if res else None
         except Exception:
             title_img = None
+        s.last_imgs = slide_imgs
+        s.last_title_img = title_img
+        await status.edit_text("🎨 Собираю слайды…")
         data = build_pptx(content, s, slide_imgs, title_img)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
-        pics = fetched + (1 if title_img else 0)
-        caption = (f"✅ Готово! Оформление: {pal_name} | 🖼 фото: {pics} "
-                   f"| v{VER}")
+        pics = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
+        secs = int(time.monotonic() - t0)
+        caption = (f"✅ Готово за {secs}с! Оформление: {pal_name} "
+                   f"| 🖼 фото: {pics} | v{VER}")
         if source == "wiki":
-            caption += "\n⚠️ AI-лимит исчерпан — текст собран из Википедии"
-        buttons = []
-        for i in range(min(5, len(slides))):
-            buttons.append([InlineKeyboardButton(
-                f"✏️ Слайд {i + 1}", callback_data=f"edit:{i + 1}"
-            )])
-        buttons.append([InlineKeyboardButton("🔄 Создать заново",
-                                             callback_data="go")])
+            caption += "\n⚠️ AI-лимит исчерпан — текст из Википедии"
         await context.bot.send_document(
             chat_id=chat_id,
             document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
             caption=caption,
-            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+        await context.bot.send_message(
+            chat_id,
+            "✏️ Хочешь поправить заголовок слайда? Нажми номер и напиши "
+            "новый текст:",
+            reply_markup=edit_keyboard(len(slides)),
         )
         try:
             await status.edit_text("✅ Презентация готова, файл выше 👆")
@@ -1053,10 +1099,10 @@ async def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("cancel", on_edit_text))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^/edit\s+\d+'), on_edit_text))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
+                                   on_message))
 
     await app.initialize()
     await app.start()
