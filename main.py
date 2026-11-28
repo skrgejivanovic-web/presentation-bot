@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "14"
+VER = "15"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -87,7 +87,6 @@ PALETTE_NAMES = {
     "real_estate": "🏠 недвижимость", "psychology": "🧠 психология",
 }
 
-# ВСЕ ЦВЕТА ВАЛИДНЫ (0-255). Проверено вручную.
 PALETTES = {
     "dark": {"bg": RGBColor(0x17, 0x17, 0x20), "panel": RGBColor(0x26, 0x26, 0x33), "accent": RGBColor(0x00, 0xB8, 0xD4), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xF2, 0xF2, 0xF5), "muted": RGBColor(0xC0, 0xC0, 0xD0)},
     "light": {"bg": RGBColor(0xFA, 0xFA, 0xFC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1F, 0x6F, 0xEB), "accent2": RGBColor(0x0F, 0x9D, 0x58), "text": RGBColor(0x1E, 0x1E, 0x28), "muted": RGBColor(0x5A, 0x5A, 0x6A)},
@@ -393,7 +392,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await q.answer()
         await q.edit_message_text(f"⏳ Рисую «{s.topic}» ({s.count} слайдов, {style_label(s)})…")
-        await generate_and_send(update, context, s)
+        await generate_with_progress(update, context, s)
 
     elif data == "regen":
         if s.busy:
@@ -404,7 +403,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await q.answer()
         await q.message.reply_text(f"🔄 Перегенерирую «{s.topic}»…")
-        await generate_and_send(update, context, s)
+        await generate_with_progress(update, context, s)
 
 
 PROMPT = (
@@ -591,7 +590,7 @@ async def _download_image(sess, url, quality=85):
 
 
 async def fetch_topic_image(query, quality=85):
-    timeout = aiohttp.ClientTimeout(total=6, connect=3)
+    timeout = aiohttp.ClientTimeout(total=4, connect=2)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
         # Источник 1: Wikimedia Commons
         try:
@@ -669,7 +668,8 @@ async def fetch_topic_image(query, quality=85):
     return None
 
 
-async def fetch_images_parallel(queries, limit=6, quality=85):
+async def fetch_images_parallel(queries, limit=4, quality=85):
+    """Параллельная загрузка картинок с ограничением времени"""
     tasks = []
     for i, q in enumerate(queries):
         if i >= limit or not q:
@@ -679,7 +679,15 @@ async def fetch_images_parallel(queries, limit=6, quality=85):
     if not tasks:
         return [None] * len(queries)
     
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # Общий таймаут на все задачи: 15 секунд максимум
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=15
+        )
+    except asyncio.TimeoutError:
+        log.warning("Image loading timed out after 15s")
+        results = [None] * len(tasks)
     
     out = []
     for r in results:
@@ -692,6 +700,12 @@ async def fetch_images_parallel(queries, limit=6, quality=85):
         out.append(None)
     
     return out
+
+
+def make_progress_bar(percent, width=20):
+    filled = int(width * percent / 100)
+    bar = "█" * filled + "░" * (width - filled)
+    return f"[{bar}] {percent}%"
 
 
 def set_bg(slide, color):
@@ -906,8 +920,10 @@ def add_chart_slide(prs, chart, rows, pal, num, total, date_str):
     add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9), str(chart.get("title") or "Диаграмма"), 40, pal["text"], bold=True, font=pal["hfont"])
     add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08), pal["accent"])
     cd = CategoryChartData()
-    cd.categories = [r[0] for r in rows]
-    cd.add_series("Значения", tuple(r[1] for r in rows))
+    categories = [r[0] for r in rows]
+    values = tuple(r[1] for r in rows)
+    cd.categories = categories
+    cd.add_series("Значения", values)
     ctype = XL_CHART_TYPE.PIE
     if str(chart.get("type", "")).lower() == "bar":
         ctype = XL_CHART_TYPE.BAR_CLUSTERED
@@ -1018,15 +1034,37 @@ async def rebuild_and_send(update, context, s):
         await update.message.reply_text(f"😔 Ошибка пересборки: {e}")
 
 
-async def generate_and_send(update, context, s):
+async def generate_with_progress(update, context, s):
+    """Генерация с детальным прогресс-баром"""
     chat_id = update.effective_chat.id
-    status = update.effective_message
+    status_msg = update.effective_message
+    
+    # Этапы работы и их веса в процентах
+    stages = [
+        ("🧠 Генерация текста AI", 30),
+        ("🖼 Поиск фотографий", 40),
+        ("🎨 Сборка слайдов", 20),
+        ("📦 Упаковка файла", 10),
+    ]
+    
+    current_percent = 0
+    stage_index = 0
+    
+    async def update_progress(message, increment=0):
+        nonlocal current_percent
+        current_percent = min(100, current_percent + increment)
+        progress_line = make_progress_bar(current_percent)
+        try:
+            await status_msg.edit_text(f"{message}\n{progress_line}")
+        except Exception:
+            pass
+    
     s.busy = True
     t0 = time.monotonic()
-    quality = 85
+    
     try:
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await status.edit_text("🧠 Пишу текст…")
+        # Этап 1: AI текст
+        await update_progress(f"{stages[stage_index][0]}...", 5)
         source = "AI"
         try:
             content = await ask_ai(s)
@@ -1034,25 +1072,46 @@ async def generate_and_send(update, context, s):
             log.warning("AI unavailable, using Wikipedia fallback: %s", e)
             content = await fallback_content(s)
             source = "wiki"
+        
         s.last_content = content
         slides = content.get("slides", [])[: s.count]
-        await status.edit_text("🖼 Ищу фото (параллельно)…")
+        await update_progress(f"{stages[stage_index][0]} ✅", 25)
+        stage_index += 1
+        
+        # Этап 2: Параллельная загрузка картинок
+        await update_progress(f"{stages[stage_index][0]}...", 5)
         queries = [str(it.get("img") or it.get("title") or s.topic) for it in slides]
-        slide_imgs = await fetch_images_parallel(queries, limit=6, quality=quality)
+        
+        # Загружаем максимум 4 картинки параллельно с общим таймаутом 15 сек
+        slide_imgs = await fetch_images_parallel(queries, limit=4, quality=85)
+        
         title_img = None
         try:
-            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=quality)
+            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=85)
             title_img = res[0] if res else None
         except Exception:
             title_img = None
+        
+        pics_loaded = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
+        await update_progress(f"{stages[stage_index][0]} ✅ ({pics_loaded} шт.)", 35)
+        stage_index += 1
+        
         s.last_imgs = slide_imgs
         s.last_title_img = title_img
-        await status.edit_text("🎨 Собираю слайды…")
-        data = build_pptx(content, s, slide_imgs, title_img, quality)
-        if len(data) > 5 * 1024 * 1024:
-            log.info("File too large, recompressing with lower quality")
+        
+        # Этап 3: Сборка PPTX
+        await update_progress(f"{stages[stage_index][0]}...", 5)
+        data = build_pptx(content, s, slide_imgs, title_img)
+        await update_progress(f"{stages[stage_index][0]} ✅", 15)
+        stage_index += 1
+        
+        # Проверка размера файла
+        file_size_mb = len(data) / (1024 * 1024)
+        if file_size_mb > 5:
+            log.info(f"File too large ({file_size_mb:.1f}MB), recompressing...")
+            await update_progress(f"{stages[stage_index][0]} (сжатие)...", 3)
             quality = 60
-            slide_imgs = await fetch_images_parallel(queries, limit=6, quality=quality)
+            slide_imgs = await fetch_images_parallel(queries, limit=4, quality=quality)
             title_img = None
             try:
                 res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=quality)
@@ -1061,23 +1120,28 @@ async def generate_and_send(update, context, s):
                 title_img = None
             s.last_imgs = slide_imgs
             s.last_title_img = title_img
-            data = build_pptx(content, s, slide_imgs, title_img, quality)
+            data = build_pptx(content, s, slide_imgs, title_img)
+        
+        # Этап 4: Отправка файла
+        await update_progress(f"{stages[stage_index][0]}...", 5)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
-        pics = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
         secs = int(time.monotonic() - t0)
         total_words = sum(len(str(b).split()) for sl in slides for b in sl.get("bullets", []))
-        caption = f"✅ Готово за {secs}с! {pal_name} | 🖼 {pics} | 📝 {total_words} слов | v{VER} | {len(slides)} слайдов"
+        
+        caption = f"✅ Готово за {secs}с!\n"
+        caption += f"🎨 {pal_name} | 🖼 {pics_loaded} фото | 📝 {total_words} слов\n"
+        caption += f"v{VER} | {len(slides)} слайдов | {file_size_mb:.1f} MB"
         if source == "wiki":
             caption += "\n⚠️ AI-лимит исчерпан — текст из Википедии"
-        if len(data) > 5 * 1024 * 1024:
-            caption += "\n⚠️ Файл сжат для уменьшения размера"
+        
         await context.bot.send_document(
             chat_id=chat_id,
             document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
             caption=caption,
         )
+        
         buttons = edit_keyboard(len(slides))
         buttons.inline_keyboard.append([InlineKeyboardButton("🔄 Перегенерировать", callback_data="regen")])
         await context.bot.send_message(
@@ -1085,17 +1149,20 @@ async def generate_and_send(update, context, s):
             "✏️ Нажми номер слайда и напиши новый заголовок:",
             reply_markup=buttons,
         )
-        try:
-            await status.edit_text("✅ Презентация готова, файл выше 👆")
-        except Exception:
-            pass
+        
+        await update_progress("🎉 Презентация готова!", 100 - current_percent)
+        
     except Exception as e:
         log.exception("generation failed")
         reason = f"{type(e).__name__}: {e}"
         if len(reason) > 300:
             reason = reason[:300] + "…"
         try:
-            await status.edit_text(f"😔 Не получилось создать презентацию.\nПричина: {reason}\n\nПопробуй ещё раз: /start")
+            await status_msg.edit_text(
+                f"😔 Не получилось создать презентацию.\n"
+                f"Причина: {reason}\n\n"
+                f"Попробуй ещё раз: /start"
+            )
         except Exception:
             pass
     finally:
