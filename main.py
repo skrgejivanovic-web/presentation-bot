@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "20.1"
+VER = "20.2"
 
 # --- Настройки окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
@@ -48,6 +48,13 @@ GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID", "")
 GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "") 
 
 PORT = int(os.getenv("PORT", "10000"))
+
+# ИСПРАВЛЕНО: Добавлены недостающие константы API
+COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+WIKI_API = "https://ru.wikipedia.org/w/api.php"
+EN_WIKI_API = "https://en.wikipedia.org/w/api.php"
+OPENVERSE_API = "https://api.openverse.org/v1/images/"
+HTTP_HEADERS = {"User-Agent": "presentation-bot/1.0 (telegram bot)"}
 
 # URL для получения токена доступа (OAuth)
 GIGACHAT_OAUTH_URL = "https://ngrok.devices.sberbank.ru/api/v1/oauth/token" 
