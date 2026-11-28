@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "23"
+VER = "23.1"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID", "")
@@ -224,7 +224,7 @@ def settings_keyboard(s):
         hist_row = []
         recent_topics = s.history[-3:]
         for i, h in enumerate(recent_topics, start=1):
-            short_name = h[:12] + "…" if len(h) > 12 else h
+            short_name = h[:12] + "..." if len(h) > 12 else h
             hist_row.append(InlineKeyboardButton(short_name, callback_data=f"hidx:{i}"))
         if hist_row:
             rows.append(hist_row)
@@ -293,7 +293,7 @@ async def cmd_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"💡 {slide['fact']}\n"
         text += "\n"
     if len(text) > 4000:
-        text = text[:4000] + "…"
+        text = text[:4000] + "..."
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
@@ -956,7 +956,7 @@ def truncate_text(text, max_chars):
     last_space = truncated.rfind(" ")
     if last_space > max_chars * 0.6:
         truncated = truncated[:last_space]
-    return truncated.rstrip(",.;:!?"") + "…"
+    return truncated.rstrip(',.;:!?') + '...'
 
 
 def fit_font_size(text, box_width_inches, target_height_pt, base_size, min_size=10):
@@ -1407,7 +1407,7 @@ def clean_bullets(raw, limit=4):
     out = []
     for b in raw or []:
         t = str(b).strip()
-        t = t.strip("\"'""«»`·—–")
+        t = t.strip('"\'""«»`·—–')
         if len(t) < 5:
             continue
         out.append(t[:250])
@@ -1439,7 +1439,7 @@ def build_pptx(content, s, slide_imgs, title_img, quality=85):
     prs.slide_height = Inches(7.5)
     prs.core_properties.title = str(content.get("title") or s.topic)
     prs.core_properties.subject = s.topic
-    prs.core_properties.author = "Presentation Bot v23"
+    prs.core_properties.author = "Presentation Bot v23.1"
     prs.core_properties.created = datetime.now()
     date_str = datetime.now().strftime("%d.%m.%Y")
     
@@ -1690,7 +1690,7 @@ async def generate_simple_flow(update, context, s):
         log.exception("generation failed completely")
         reason = f"{type(e).__name__}: {e}"
         if len(reason) > 300:
-            reason = reason[:300] + "…"
+            reason = reason[:300] + "..."
         try:
             await status_msg.edit_text(
                 f"😔 Не получилось создать презентацию.\n"
