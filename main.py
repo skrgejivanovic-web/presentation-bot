@@ -6,7 +6,7 @@ import os
 import re
 import time
 from datetime import datetime
-import base64  # <-- ДОБАВИЛ ЭТУ СТРОКУ (нужно для авторизации)
+import base64  # <-- ВАЖНО: добавлено для авторизации GigaChat
 
 import aiohttp
 from aiohttp import web
@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "20"
+VER = "20.1"
 
 # --- Настройки окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
@@ -50,7 +50,6 @@ GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
 PORT = int(os.getenv("PORT", "10000"))
 
 # URL для получения токена доступа (OAuth)
-# Используем стандартный эндпоинт для физлиц
 GIGACHAT_OAUTH_URL = "https://ngrok.devices.sberbank.ru/api/v1/oauth/token" 
 REAL_GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
@@ -202,27 +201,39 @@ def mark(selected, text):
     return f"✅ {text}" if selected else text
 
 
+# ИСПРАВЛЕНО: Безопасная клавиатура настроек
 def settings_keyboard(s):
     rows = []
+    # Выбор количества слайдов
     for row in (COUNTS[:3], COUNTS[3:]):
         rows.append([InlineKeyboardButton(mark(s.count == n, str(n)), callback_data=f"n:{n}") for n in row])
+    
+    # Язык
     rows.append([
         InlineKeyboardButton(mark(s.lang == "ru", "🇷🇺 Русский"), callback_data="lang:ru"),
         InlineKeyboardButton(mark(s.lang == "en", "🇬🇧 English"), callback_data="lang:en"),
     ])
+    
+    # Стиль оформления
     rows.append([
         InlineKeyboardButton(mark(s.style == "auto", "🪄 Авто"), callback_data="style:auto"),
         InlineKeyboardButton(mark(s.style == "dark", "🌙 Тёмная"), callback_data="style:dark"),
         InlineKeyboardButton(mark(s.style == "light", "☀️ Светлая"), callback_data="style:light"),
         InlineKeyboardButton(mark(s.style == "color", "🎨 Яркая"), callback_data="style:color"),
     ])
+    
+    # История тем (используем индексы, чтобы не было ошибок Button_data_invalid)
     if s.history:
         hist_row = []
-        for h in s.history[-3:]:
-            short = h[:15] + "…" if len(h) > 15 else h
-            hist_row.append(InlineKeyboardButton(short, callback_data=f"hist:{h}"))
+        # Берем последние 3 темы из истории
+        recent_topics = s.history[-3:]
+        for i, h in enumerate(recent_topics, start=1):
+            short_name = h[:12] + "…" if len(h) > 12 else h
+            # Передаем только номер (hidx:1, hidx:2...), это безопасно для Telegram
+            hist_row.append(InlineKeyboardButton(short_name, callback_data=f"hidx:{i}"))
         if hist_row:
             rows.append(hist_row)
+            
     rows.append([InlineKeyboardButton("🚀 Создать презентацию", callback_data="go")])
     return InlineKeyboardMarkup(rows)
 
@@ -319,7 +330,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if s.topic not in s.history:
         s.history.append(s.topic)
         if len(s.history) > 5:
-            s.history = s.history[-5:]
+            s.history.pop(0) # Удаляем самую старую
     await update.message.reply_text(settings_text(s), reply_markup=settings_keyboard(s))
 
 
@@ -346,10 +357,20 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await refresh(q, s)
 
-    elif data.startswith("hist:"):
-        s.topic = data.split(":", 1)[1]
-        await q.answer()
-        await q.edit_message_text(settings_text(s), reply_markup=settings_keyboard(s))
+    # ИСПРАВЛЕНО: Обработка истории через индексы
+    elif data.startswith("hidx:"):
+        try:
+            idx = int(data.split(":", 1)[1]) - 1
+            # Проверяем, что индекс корректный относительно последних 3 элементов
+            recent_topics = s.history[-3:]
+            if 0 <= idx < len(recent_topics):
+                s.topic = recent_topics[idx]
+                await q.answer()
+                await refresh(q, s)
+            else:
+                await q.answer("Тема уже удалена из истории")
+        except ValueError:
+            await q.answer("Ошибка данных")
 
     elif data.startswith("edit:"):
         if not s.last_content:
