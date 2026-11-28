@@ -9,14 +9,13 @@ from datetime import datetime
 
 import aiohttp
 from aiohttp import web
-from openai import AsyncOpenAI
 from PIL import Image
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 from telegram import (
     InlineKeyboardButton,
@@ -40,39 +39,21 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "16"
+VER = "20"
 
+# --- Настройки окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID", "")
+GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "") # Это Authorization Key из кабинета
 
-if OPENAI_API_KEY.startswith("gsk_"):
-    DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-    DEFAULT_MODEL = "openai/gpt-oss-120b"
-else:
-    DEFAULT_BASE_URL = None
-    DEFAULT_MODEL = "gpt-4o-mini"
-
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or DEFAULT_BASE_URL
-OPENAI_MODEL = os.getenv("OPENAI_MODEL") or DEFAULT_MODEL
 PORT = int(os.getenv("PORT", "10000"))
 
-MODEL_CHAIN = []
-for m in (
-    OPENAI_MODEL,
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-):
-    if m and m not in MODEL_CHAIN:
-        MODEL_CHAIN.append(m)
+# URL для получения токена доступа (OAuth)
+GIGACHAT_OAUTH_URL = "https://ngrok.devices.sberbank.ru/api/v1/oauth/token" 
+# NOTE: Реальный URL может отличаться, используем стандартный для физлиц
+REAL_GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 COUNTS = (3, 5, 7, 10, 12, 15)
-
-COMMONS_API = "https://commons.wikimedia.org/w/api.php"
-WIKI_API = "https://ru.wikipedia.org/w/api.php"
-EN_WIKI_API = "https://en.wikipedia.org/w/api.php"
-OPENVERSE_API = "https://api.openverse.org/v1/images/"
-HTTP_HEADERS = {"User-Agent": "presentation-bot/1.0 (telegram bot)"}
 
 PALETTE_NAMES = {
     "dark": "🌙 тёмная", "light": "☀️ светлая", "color": "🎨 яркая",
@@ -136,28 +117,26 @@ THEME_FONTS = {
 }
 
 THEME_KEYWORDS = (
-    (("медиц", "здоров", "врач", "больн", "лекар", "аптек", "диагноз", "хирург", "therapy", "health", "medical", "doctor", "hospital", "clinic", "pharma", "surgery"), "med"),
-    (("косм", "звезд", "планет", "вселен", "галакт", "орбит", "ракета", "астероид", "comet", "nebula", "satellite", "rocket", "moon", "mars", "jupiter", "telescope"), "space"),
-    (("природ", "экол", "лес", "растен", "животн", "климат", "почва", "река", "горы", "ocean", "wildlife", "botany", "zoology", "ecosystem", "conservation"), "nature"),
-    (("финанс", "деньг", "банк", "инвест", "эконом", "бизнес", "прибыл", "акции", "крипто", "budget", "stock", "trading", "startup", "profit", "tax", "loan"), "finance"),
-    (("техно", "робот", "программ", "нейросет", "интеллект", "компьютер", "интернет", "цифров", "algorithm", "machine learning", "deep learning", "cybersecurity", "blockchain", "cloud"), "tech"),
-    (("школ", "учеб", "образован", "курс", "студент", "преподав", "лекция", "exam", "curriculum", "pedagogy", "university", "college", "diploma"), "edu"),
-    (("спорт", "футбол", "фитнес", "олимп", "хокке", "баскетбол", "теннис", "бокс", "marathon", "athlete", "training", "workout", "championship"), "sport"),
-    (("искусств", "культур", "музык", "театр", "дизайн", "живопис", "кинематограф", "sculpture", "gallery", "concert", "opera", "photography"), "art"),
-    (("еда", "кулинар", "рецепт", "готов", "блюдо", "ужин", "обед", "завтрак", "dessert", "restaurant", "chef", "cooking", "bakery", "coffee", "tea"), "food"),
-    (("путешеств", "туризм", "отпуск", "стран", "город", "экскурсия", "hotel", "airline", "passport", "adventure", "destination", "resort"), "travel"),
-    (("истор", "древн", "войн", "импер", "цар", "средневеков", "античность", "civilization", "dynasty", "empire", "revolution", "century"), "history"),
-    (("наук", "физик", "хим", "биолог", "математ", "геолог", "астроном", "genetics", "quantum", "evolution", "research", "laboratory", "experiment"), "science"),
-    (("игр", "геймер", "видеоигр", "консол", "esport", "game design", "player", "level", "quest", "multiplayer", "strategy game"), "gaming"),
-    (("мод", "стиль", "одежд", "lookbook", "designer", "runway", "couture", "accessories", "brand", "trend"), "fashion"),
-    (("авто", "машин", "автомобил", "транспорт", "электрокар", "motorcycle", "engine", "driving", "fleet", "electric vehicle"), "auto"),
-    (("недвижим", "дом", "квартир", "аренд", "ипотека", "construction", "property", "mortgage", "rental", "architecture"), "real_estate"),
-    (("психолог", "мозг", "сознан", "эмоц", "терапия", "mindfulness", "cognitive", "behavior", "stress", "anxiety", "mental health"), "psychology"),
+    (("медиц", "здоров", "врач", "больн", "лекар", "therapy", "health", "medical", "doctor", "hospital"), "med"),
+    (("косм", "звезд", "планет", "вселен", "галакт", "orbit", "rocket", "moon", "mars"), "space"),
+    (("природ", "экол", "лес", "растен", "животн", "климат", "ocean", "wildlife", "eco"), "nature"),
+    (("финанс", "деньг", "банк", "инвест", "эконом", "бизнес", "budget", "stock", "profit"), "finance"),
+    (("техно", "робот", "программ", "нейросет", "intell", "computer", "digital", "code"), "tech"),
+    (("школ", "учеб", "образован", "курс", "student", "lesson", "exam"), "edu"),
+    (("спорт", "футбол", "fitness", "olympic", "game", "match"), "sport"),
+    (("искусств", "культур", "музык", "театр", "design", "paint"), "art"),
+    (("еда", "кулинар", "рецепт", "готов", "food", "cook", "dish"), "food"),
+    (("путешеств", "туризм", "отпуск", "стран", "travel", "trip", "city"), "travel"),
+    (("истор", "древн", "войн", "импер", "history", "war", "king"), "history"),
+    (("наук", "физик", "хим", "биолог", "math", "physics", "bio"), "science"),
+    (("игр", "геймер", "video game", "play", "quest"), "gaming"),
+    (("мод", "стиль", "одежд", "fashion", "style", "wear"), "fashion"),
+    (("авто", "машин", "автомобил", "car", "drive", "transport"), "auto"),
+    (("недвижим", "дом", "квартир", "rent", "house", "flat"), "real_estate"),
+    (("психолог", "мозг", "сознан", "mind", "brain", "emotion"), "psychology"),
 )
 
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-
-ai = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
 
 class Session:
@@ -196,7 +175,7 @@ def auto_style(topic):
             scores[theme_key] = score
     if scores:
         best_theme = max(scores.items(), key=lambda x: x[1])[0]
-        log.info(f"Theme matched: {best_theme} (score={scores[best_theme]:.1f})")
+        log.info(f"Theme matched: {best_theme}")
         return best_theme
     pool = ("dark", "light", "color", "art", "space", "tech")
     idx = sum(ord(ch) for ch in low) % len(pool)
@@ -391,7 +370,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Сначала напиши тему сообщением.")
             return
         await q.answer()
-        await generate_with_progress(update, context, s)
+        await generate_simple_flow(update, context, s)
 
     elif data == "regen":
         if s.busy:
@@ -401,7 +380,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Нет темы")
             return
         await q.answer()
-        await generate_with_progress(update, context, s)
+        await generate_simple_flow(update, context, s)
 
 
 PROMPT = (
@@ -442,60 +421,105 @@ def extract_json(text):
     return text[start : end + 1]
 
 
-async def ask_ai(s, retry_count=0):
+async def get_gigachat_access_token():
+    """Получаем временный access token по Client ID и Secret"""
+    auth_header = f"Basic {base64.b64encode(f'{GIGACHAT_CLIENT_ID}:{GIGACHAT_AUTH_KEY}'.encode()).decode()}"
+    
+    payload = {
+        "grant_type": "client_credentials",
+        "scope": "GIGACHAT_API_PERS"
+    }
+    
+    headers = {
+        "Authorization": auth_header,
+        "Content-Type": "application/json"
+    }
+    
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as sess:
+        try:
+            async with sess.post(GIGACHAT_OAUTH_URL, json=payload, headers=headers) as r:
+                if r.status != 200:
+                    log.error(f"GigaChat OAuth failed: {await r.text()}")
+                    raise ValueError("Failed to get access token")
+                data = await r.json()
+                return data.get("access_token")
+        except Exception as e:
+            log.error(f"GigaChat OAuth error: {e}")
+            raise
+
+
+async def ask_gigachat(prompt_text):
+    """Отправляем запрос к GigaChat напрямую через aiohttp"""
+    access_token = await get_gigachat_access_token()
+    
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant that generates presentations."},
+        {"role": "user", "content": prompt_text}
+    ]
+    
+    payload = {
+        "model": "GigaChat-Max",
+        "messages": messages,
+        "temperature": 0.7
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    
+    timeout = aiohttp.ClientTimeout(total=60) # Даем больше времени на ответ AI
+    
+    async with aiohttp.ClientSession(timeout=timeout) as sess:
+        try:
+            async with sess.post(REAL_GIGACHAT_API_URL, json=payload, headers=headers) as r:
+                if r.status != 200:
+                    err_body = await r.text()
+                    log.error(f"GigaChat API Error {r.status}: {err_body}")
+                    raise RuntimeError(f"GigaChat returned {r.status}")
+                
+                resp_data = await r.json()
+                content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return content
+                
+        except asyncio.TimeoutError:
+            raise TimeoutError("GigaChat timed out after 60s")
+        except Exception as e:
+            log.exception("Unexpected error calling GigaChat")
+            raise RuntimeError(f"GigaChat call failed: {e}")
+
+
+async def ask_ai_multi(s):
     lang = "Russian" if s.lang == "ru" else "English"
     prompt = PROMPT.format(lang=lang, count=s.count, topic=s.topic)
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a presentation writer. You reply only "
-                       f"with valid JSON, without markdown and comments. "
-                       f"You MUST create EXACTLY {s.count} slides. "
-                       f"Count them before returning.",
-        },
-        {"role": "user", "content": prompt},
-    ]
-    last_error = None
-    for model in MODEL_CHAIN:
-        for use_format in (True, False):
-            try:
-                kwargs = {"model": model, "messages": messages}
-                if use_format:
-                    kwargs["response_format"] = {"type": "json_object"}
-                resp = await ai.chat.completions.create(**kwargs)
-                raw = resp.choices[0].message.content or ""
-                json_str = extract_json(raw)
-                if not json_str:
-                    last_error = ValueError(f"{model}: no JSON")
-                    log.warning(str(last_error))
-                    continue
-                content = json.loads(json_str)
-                slides = content.get("slides", [])
-                if not isinstance(slides, list) or not slides:
-                    last_error = ValueError(f"{model}: bad slides")
-                    log.warning(str(last_error))
-                    continue
-                if len(slides) < s.count:
-                    log.warning(f"Model returned {len(slides)} slides, need {s.count}")
-                    if retry_count < 2:
-                        return await ask_ai(s, retry_count + 1)
-                    last_error = ValueError(f"{model}: only {len(slides)} slides")
-                    log.warning(str(last_error))
-                    continue
-                log.info("AI model used: %s (json_mode=%s, slides=%d)", model, use_format, len(slides))
-                return content
-            except Exception as e:
-                last_error = e
-                log.warning("Model %s json_mode=%s failed: %s", model, use_format, e)
-    raise last_error
-
-
-# ИСПРАВЛЕНО: умный fallback который сам структурирует данные из Википедии
-async def smart_fallback_from_wikipedia(s):
-    """Берём заголовок из Википедии, но структуру делаем сами"""
-    api = WIKI_API if s.lang == "ru" else EN_WIKI_API
     
-    # Шаг 1: Получаем первую статью
+    try:
+        raw_response = await ask_gigachat(prompt)
+        json_str = extract_json(raw_response)
+        
+        if not json_str:
+            raise ValueError("No JSON found in response")
+            
+        content = json.loads(json_str)
+        slides = content.get("slides", [])
+        
+        if not isinstance(slides, list) or len(slides) < s.count:
+             # Если мало слайдов, догенерируем заглушками или попробуем еще раз
+             log.warning(f"Got {len(slides)} slides, need {s.count}. Trying again...")
+             raw_response = await ask_gigachat(prompt)
+             json_str = extract_json(raw_response)
+             content = json.loads(json_str)
+             
+        return content
+        
+    except Exception as e:
+        log.error(f"Main AI flow failed: {e}")
+        raise e
+
+
+async def smart_fallback_from_wikipedia(s):
+    api = WIKI_API if s.lang == "ru" else EN_WIKI_API
     params = {
         "action": "query",
         "format": "json",
@@ -509,35 +533,22 @@ async def smart_fallback_from_wikipedia(s):
         "piprop": "thumbnail",
         "pithumbsize": "900",
     }
-    
     timeout = aiohttp.ClientTimeout(total=10)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
         async with sess.get(api, params=params) as r:
             data = await r.json(content_type=None)
-    
     pages = (data.get("query") or {}).get("pages") or {}
     if not pages:
         raise ValueError("no Wikipedia article found")
-    
     page = list(pages.values())[0]
     article_title = page.get("title", s.topic)
     extract = (page.get("extract") or "").strip()
     thumbnail_url = (page.get("thumbnail") or {}).get("source")
-    
-    # Шаг 2: Разбиваем текст на предложения
     sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", extract) if x.strip()]
-    
-    # Шаг 3: Создаём структуру слайдов автоматически
     slides = []
-    
-    # Первый слайд - введение
-    intro_bullets = []
-    for sent in sentences[:4]:
-        if len(sent) > 20 and len(sent) < 200:
-            intro_bullets.append(sent)
+    intro_bullets = [sent for sent in sentences[:4] if 20 < len(sent) < 200]
     if not intro_bullets:
         intro_bullets = ["Основные сведения о теме", "Краткое описание предмета рассмотрения"]
-    
     slides.append({
         "title": "Введение",
         "lead": f"Знакомство с темой: {article_title}",
@@ -546,30 +557,22 @@ async def smart_fallback_from_wikipedia(s):
         "fact": "",
         "speaker_notes": "Представьте тему аудитории кратко и ясно.",
     })
-    
-    # Средние слайды - детали из текста
     detail_sentences = [sent for sent in sentences if len(sent) > 30][:20]
     chunk_size = max(2, len(detail_sentences) // (s.count - 2)) if s.count > 2 else 2
-    
     section_names = ["Основная часть", "Детали и аспекты", "Практическое применение", 
                      "Преимущества и особенности", "Вызовы и решения", "Перспективы развития"]
-    
-    for i in range(min(s.count - 2, 5)):  # Максимум 5 средних слайдов
+    for i in range(min(s.count - 2, 5)):
         start_idx = i * chunk_size
         end_idx = start_idx + chunk_size
         chunk_sents = detail_sentences[start_idx:end_idx]
-        
         bullets = []
         for sent in chunk_sents:
             cleaned = sent.replace("\n", " ").strip()
             if 20 < len(cleaned) < 180:
                 bullets.append(cleaned)
-        
         if not bullets:
             bullets = [f"Аспект {i+1} темы {article_title}", "Дополнительные сведения по разделу"]
-        
         section_name = section_names[i] if i < len(section_names) else f"Раздел {i+1}"
-        
         slides.append({
             "title": section_name,
             "lead": f"Подробное рассмотрение: {section_name.lower()} темы {article_title}",
@@ -578,21 +581,17 @@ async def smart_fallback_from_wikipedia(s):
             "fact": "",
             "speaker_notes": f"Расскажите подробнее про {section_name.lower()}.",
         })
-    
-    # Последний слайд - заключение
     conclusion_bullets = []
     remaining_sents = detail_sentences[len(section_names)*chunk_size:]
     for sent in remaining_sents[:3]:
         if len(sent) > 25:
             conclusion_bullets.append(sent)
-    
     if not conclusion_bullets:
         conclusion_bullets = [
             "Подведём итоги рассмотренной темы",
             "Запомните ключевые моменты презентации",
             "Эта информация поможет лучше понять предмет"
         ]
-    
     slides.append({
         "title": "Заключение",
         "lead": f"Итоги по теме: {article_title}",
@@ -601,14 +600,11 @@ async def smart_fallback_from_wikipedia(s):
         "fact": "",
         "speaker_notes": "Сделайте выводы и поблагодарите аудиторию.",
     })
-    
-    # Добавляем статистику и диаграмму (упрощённые)
     stats = [
         {"value": f"{len(sentences)}", "label": "предложений найдено"},
         {"value": f"{len(slides)}", "label": "слайдов создано"},
         {"value": "Wiki", "label": "источник данных"},
     ]
-    
     chart = {
         "title": f"Структура презентации: {article_title}",
         "type": "bar",
@@ -618,7 +614,6 @@ async def smart_fallback_from_wikipedia(s):
             {"label": "Заключение", "value": 1},
         ],
     }
-    
     result = {
         "title": article_title,
         "subtitle": f"Материалы собраны из Википедии ({datetime.now().strftime('%d.%m.%Y')})",
@@ -629,7 +624,6 @@ async def smart_fallback_from_wikipedia(s):
         "chart": chart,
         "conclusion": f"Мы рассмотрели основные аспекты темы «{article_title}». Спасибо за внимание!",
     }
-    
     log.info(f"Wikipedia fallback created {len(slides)} structured slides from '{article_title}'")
     return result, thumbnail_url
 
@@ -682,7 +676,6 @@ async def _download_image(sess, url, quality=85):
 async def fetch_topic_image(query, quality=85):
     timeout = aiohttp.ClientTimeout(total=4, connect=2)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
-        # Источник 1: Wikimedia Commons
         try:
             params = {
                 "action": "query",
@@ -711,8 +704,6 @@ async def fetch_topic_image(query, quality=85):
                         return img
         except Exception as e:
             log.warning("commons failed for %s: %s", query, e)
-        
-        # Источник 2: Wikipedia thumbnails
         try:
             params = {
                 "action": "query",
@@ -737,8 +728,6 @@ async def fetch_topic_image(query, quality=85):
                         return img
         except Exception as e:
             log.warning("wiki image failed for %s: %s", query, e)
-        
-        # Источник 3: Openverse
         try:
             async with sess.get(OPENVERSE_API, params={"q": query, "page_size": "5"}) as r:
                 if r.status == 200:
@@ -754,7 +743,6 @@ async def fetch_topic_image(query, quality=85):
                                 return img
         except Exception as e:
             log.warning("openverse failed for %s: %s", query, e)
-    
     return None
 
 
@@ -764,10 +752,8 @@ async def fetch_images_parallel(queries, limit=4, quality=85):
         if i >= limit or not q:
             continue
         tasks.append(fetch_topic_image(q, quality))
-    
     if not tasks:
         return [None] * len(queries)
-    
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*tasks, return_exceptions=True),
@@ -776,17 +762,14 @@ async def fetch_images_parallel(queries, limit=4, quality=85):
     except asyncio.TimeoutError:
         log.warning("Image loading timed out after 12s")
         results = [None] * len(tasks)
-    
     out = []
     for r in results:
         if isinstance(r, BaseException):
             out.append(None)
         else:
             out.append(r)
-    
     while len(out) < len(queries):
         out.append(None)
-    
     return out
 
 
@@ -869,7 +852,7 @@ def add_bullets(slide, x, y, w, h, bullets, pal, size=18):
     tf.word_wrap = True
     for i, b in enumerate(bullets):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_after = Pt(14)  # Увеличил расстояние между пунктами
+        p.space_after = Pt(14)
         r1 = p.add_run()
         r1.text = "▸ "
         r1.font.size = Pt(size)
@@ -901,18 +884,13 @@ def chart_rows(chart):
     return rows if len(rows) >= 2 else []
 
 
-# ИСПРАВЛЕНО: схема всегда присутствует
 def ensure_scheme(item):
-    """Если нет схемы, создаём простую из 3 шагов"""
     scheme = item.get("scheme")
     if scheme and isinstance(scheme, list) and len(scheme) >= 2:
         return scheme
-    
-    # Создаём дефолтную схему из заголовка
     title = str(item.get("title", "")).strip()
     if not title:
         return None
-    
     default_steps = [
         f"Шаг 1: {title[:30]}...",
         "Шаг 2: Детализация процесса",
@@ -999,43 +977,33 @@ def add_agenda_slide(prs, titles, pal, date_str):
     add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-# ИСПРАВЛЕНО: контент-слайд с правильной компоновкой
 def add_content_slide(prs, item, pal, num, total, img, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    
-    # Заголовок (всегда крупный)
     add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1), Inches(1.0), f"{num - 2:02d}", str(item.get("title") or ""), 40, pal)
     add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08), pal["accent"])
-    
     lead = str(item.get("lead") or "")
     if lead:
         add_text(slide, Inches(0.62), Inches(1.62), Inches(12.1), Inches(0.6), lead, 19, pal["muted"], italic=True, font=pal["bfont"])
-    
     bullets = clean_bullets(item.get("bullets"), 4)
     scheme = ensure_scheme(item)
-    
     wide = Inches(12.0)
     if img:
         wide = Inches(8.2)
         add_picture(slide, img, Inches(9.3), Inches(2.25), Inches(3.45), Inches(2.6), pal)
-    
-    # Буллеты или схема
     if scheme:
         add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(2.0), bullets[:3], pal, size=17)
         add_scheme(slide, scheme, pal, Inches(4.55))
     else:
         bsize = 18 if (img or len(bullets) >= 3) else 20
         add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(3.4), bullets, pal, size=bsize)
-    
     fact = str(item.get("fact") or "")
     if fact:
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(1.0), pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.1), Inches(1.0), pal["accent"])
         add_text(slide, Inches(0.95), Inches(6.3), Inches(11.5), Inches(0.65), "💡 " + fact, 17, pal["text"], italic=True, font=pal["bfont"])
-    
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
     notes = slide.notes_slide.notes_text_frame
     notes.text = str(item.get("speaker_notes") or f"Слайд {num}: {item.get('title', '')}")
@@ -1077,9 +1045,9 @@ def add_chart_slide(prs, chart, rows, pal, num, total, date_str):
     add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08), pal["accent"])
     cd = CategoryChartData()
     categories = [r[0] for r in rows]
-    values = tuple(r[1] for r in rows)
+    values_list = [r[1] for r in rows]
     cd.categories = categories
-    cd.add_series("Значения", values)
+    cd.add_series("Значения", values_list)
     ctype = XL_CHART_TYPE.PIE
     if str(chart.get("type", "")).lower() == "bar":
         ctype = XL_CHART_TYPE.BAR_CLUSTERED
@@ -1190,128 +1158,77 @@ async def rebuild_and_send(update, context, s):
         await update.message.reply_text(f"😔 Ошибка пересборки: {e}")
 
 
-# ИСПРАВЛЕНО: реальный прогресс-бар с таймером
-async def generate_with_progress(update, context, s):
+STAGE_MESSAGES = [
+    "🧠 Пишу текст презентации…",
+    "🖼 Ищу подходящие фотографии…",
+    "🎨 Оформляю слайды…",
+    "📦 Готовлю файл…",
+    "✅ Презентация готова!",
+]
+
+
+async def send_stage(status_msg, stage_idx):
+    msg = STAGE_MESSAGES[min(stage_idx, len(STAGE_MESSAGES)-1)]
+    try:
+        await status_msg.edit_text(msg)
+    except Exception:
+        pass
+
+
+async def generate_simple_flow(update, context, s):
     chat_id = update.effective_chat.id
     status_msg = update.effective_message
-    
-    stages = [
-        ("🧠 Генерация текста AI", 30),
-        ("🖼 Поиск фотографий", 40),
-        ("🎨 Сборка слайдов", 20),
-        ("📦 Упаковка файла", 10),
-    ]
-    
-    current_percent = 0
-    stage_index = 0
-    last_update_time = time.monotonic()
-    
-    async def update_progress(message, increment=0):
-        nonlocal current_percent, last_update_time
-        current_percent = min(100, current_percent + increment)
-        progress_line = make_progress_bar(current_percent)
-        
-        now = time.monotonic()
-        elapsed = int(now - t0)
-        
-        try:
-            await status_msg.edit_text(f"{message}\n{progress_line}\n⏱ Прошло: {elapsed}с")
-            last_update_time = now
-        except Exception:
-            pass
-    
     s.busy = True
     t0 = time.monotonic()
     
     try:
-        # Этап 1: AI текст (с периодическим обновлением)
-        await update_progress(f"{stages[stage_index][0]}...", 5)
-        
+        # Этап 1: Текст
+        await send_stage(status_msg, 0)
         source = "AI"
-        wiki_thumbnail_url = None
-        
-        # Таймер для регулярных обновлений во время долгого запроса к AI
-        ai_timer_task = None
-        
-        async def periodic_ai_update():
-            """Обновляет прогресс каждые 10 секунд пока ждём AI"""
-            local_pct = 5
-            while local_pct < 25:
-                await asyncio.sleep(10)
-                local_pct += 5
-                try:
-                    progress_line = make_progress_bar(local_pct)
-                    elapsed = int(time.monotonic() - t0)
-                    await status_msg.edit_text(
-                        f"{stages[stage_index][0]}...\n{progress_line}\n⏱ Прошло: {elapsed}с"
-                    )
-                except Exception:
-                    pass
+        wiki_thumb = None
         
         try:
-            ai_timer_task = asyncio.create_task(periodic_ai_update())
-            content = await ask_ai(s)
-            if ai_timer_task:
-                ai_timer_task.cancel()
-                try:
-                    await ai_timer_task
-                except asyncio.CancelledError:
-                    pass
+            content = await ask_ai_multi(s)
         except Exception as e:
-            if ai_timer_task:
-                ai_timer_task.cancel()
-                try:
-                    await ai_timer_task
-                except asyncio.CancelledError:
-                    pass
-            log.warning("AI unavailable, using Wikipedia fallback: %s", e)
-            content, wiki_thumbnail_url = await smart_fallback_from_wikipedia(s)
+            log.warning("All AI models failed, falling back to Wikipedia: %s", e)
+            content, wiki_thumb = await smart_fallback_from_wikipedia(s)
             source = "wiki"
         
         s.last_content = content
         slides = content.get("slides", [])[: s.count]
-        await update_progress(f"{stages[stage_index][0]} ✅", 25)
-        stage_index += 1
         
-        # Этап 2: Параллельная загрузка картинок
-        await update_progress(f"{stages[stage_index][0]}...", 5)
+        # Этап 2: Фото
+        await send_stage(status_msg, 1)
         queries = [str(it.get("img") or it.get("title") or s.topic) for it in slides]
-        
         slide_imgs = await fetch_images_parallel(queries, limit=4, quality=85)
         
         title_img = None
-        if wiki_thumbnail_url:
+        if wiki_thumb:
             try:
                 async with aiohttp.ClientSession(headers=HTTP_HEADERS) as sess:
-                    title_img = await _download_image(sess, wiki_thumbnail_url, 85)
+                    title_img = await _download_image(sess, wiki_thumb, 85)
             except Exception:
-                title_img = None
+                pass
         
         if not title_img:
             try:
                 res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=85)
                 title_img = res[0] if res else None
             except Exception:
-                title_img = None
+                pass
         
         pics_loaded = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
-        await update_progress(f"{stages[stage_index][0]} ✅ ({pics_loaded} шт.)", 35)
-        stage_index += 1
-        
         s.last_imgs = slide_imgs
         s.last_title_img = title_img
         
-        # Этап 3: Сборка PPTX
-        await update_progress(f"{stages[stage_index][0]}...", 5)
+        # Этап 3: Сборка
+        await send_stage(status_msg, 2)
         data = build_pptx(content, s, slide_imgs, title_img)
-        await update_progress(f"{stages[stage_index][0]} ✅", 15)
-        stage_index += 1
         
-        # Проверка размера файла
+        # Проверка размера
         file_size_mb = len(data) / (1024 * 1024)
         if file_size_mb > 5:
-            log.info(f"File too large ({file_size_mb:.1f}MB), recompressing...")
-            await update_progress(f"{stages[stage_index][0]} (сжатие)...", 3)
+            log.info(f"Recompressing due to large size ({file_size_mb:.1f}MB)")
             quality = 60
             slide_imgs = await fetch_images_parallel(queries, limit=4, quality=quality)
             title_img = None
@@ -1319,13 +1236,13 @@ async def generate_with_progress(update, context, s):
                 res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=quality)
                 title_img = res[0] if res else None
             except Exception:
-                title_img = None
+                pass
             s.last_imgs = slide_imgs
             s.last_title_img = title_img
             data = build_pptx(content, s, slide_imgs, title_img)
         
-        # Этап 4: Отправка файла
-        await update_progress(f"{stages[stage_index][0]}...", 5)
+        # Этап 4: Финализация
+        await send_stage(status_msg, 3)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
@@ -1336,7 +1253,7 @@ async def generate_with_progress(update, context, s):
         caption += f"🎨 {pal_name} | 🖼 {pics_loaded} фото | 📝 {total_words} слов\n"
         caption += f"v{VER} | {len(slides)} слайдов | {file_size_mb:.1f} MB"
         if source == "wiki":
-            caption += "\n⚠️ AI-лимит исчерпан — структура из Википедии"
+            caption += "\n⚠️ Использован резервный источник (Википедия)"
         
         await context.bot.send_document(
             chat_id=chat_id,
@@ -1352,7 +1269,7 @@ async def generate_with_progress(update, context, s):
             reply_markup=buttons,
         )
         
-        await update_progress("🎉 Презентация готова!", 100 - current_percent)
+        await send_stage(status_msg, 4)
         
     except Exception as e:
         log.exception("generation failed")
@@ -1376,8 +1293,11 @@ async def health(_request):
 
 
 async def main():
-    if not BOT_TOKEN or not OPENAI_API_KEY:
-        log.error("Set BOT_TOKEN and OPENAI_API_KEY environment variables!")
+    if not BOT_TOKEN:
+        log.error("Set BOT_TOKEN environment variable!")
+        return
+    if not any([GIGACHAT_CLIENT_ID, GIGACHAT_AUTH_KEY]):
+        log.error("At least one AI API key must be provided!")
         return
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -1392,7 +1312,7 @@ async def main():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     log.info("Bot started (polling), version %s", VER)
-    log.info("Model chain: %s", MODEL_CHAIN)
+    log.info("Active models: %s", ", ".join(p for p,_ in MODEL_CHAIN))
 
     webapp = web.Application()
     webapp.router.add_get("/", health)
