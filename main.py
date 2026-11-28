@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "13"
+VER = "14"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -70,6 +70,7 @@ COUNTS = (3, 5, 7, 10, 12, 15)
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 WIKI_API = "https://ru.wikipedia.org/w/api.php"
+EN_WIKI_API = "https://en.wikipedia.org/w/api.php"
 OPENVERSE_API = "https://api.openverse.org/v1/images/"
 HTTP_HEADERS = {"User-Agent": "presentation-bot/1.0 (telegram bot)"}
 
@@ -86,13 +87,13 @@ PALETTE_NAMES = {
     "real_estate": "🏠 недвижимость", "psychology": "🧠 психология",
 }
 
-# ИСПРАВЛЕНО: гарантированно читаемый контраст во всех темах
+# ВСЕ ЦВЕТА ВАЛИДНЫ (0-255). Проверено вручную.
 PALETTES = {
     "dark": {"bg": RGBColor(0x17, 0x17, 0x20), "panel": RGBColor(0x26, 0x26, 0x33), "accent": RGBColor(0x00, 0xB8, 0xD4), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xF2, 0xF2, 0xF5), "muted": RGBColor(0xC0, 0xC0, 0xD0)},
     "light": {"bg": RGBColor(0xFA, 0xFA, 0xFC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1F, 0x6F, 0xEB), "accent2": RGBColor(0x0F, 0x9D, 0x58), "text": RGBColor(0x1E, 0x1E, 0x28), "muted": RGBColor(0x5A, 0x5A, 0x6A)},
     "color": {"bg": RGBColor(0xFD, 0xF6, 0xEC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xFF, 0x6B, 0x35), "accent2": RGBColor(0x2E, 0x86, 0xAB), "text": RGBColor(0x2B, 0x2B, 0x2B), "muted": RGBColor(0x6A, 0x60, 0x55)},
     "med": {"bg": RGBColor(0xF2, 0xFA, 0xF8), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x96, 0x88), "accent2": RGBColor(0x00, 0x69, 0x5C), "text": RGBColor(0x16, 0x38, 0x32), "muted": RGBColor(0x4A, 0x60, 0x5A)},
-    "space": {"bg": RGBColor(0x0B, 0x10, 0x26), "panel": RGBColor(0x16, 0x1D, 0x3A), "accent": RGBColor(0x8A, 0xB4, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xEE, 0xF0, 0xFF), "muted": RGBColor(0xAAB, 0xB2, 0xD8)},
+    "space": {"bg": RGBColor(0x0B, 0x10, 0x26), "panel": RGBColor(0x16, 0x1D, 0x3A), "accent": RGBColor(0x8A, 0xB4, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xEE, 0xF0, 0xFF), "muted": RGBColor(0xAB, 0xB2, 0xD8)},
     "nature": {"bg": RGBColor(0xF3, 0xF8, 0xEE), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x55, 0x8B, 0x2F), "accent2": RGBColor(0x33, 0x69, 0x1E), "text": RGBColor(0x26, 0x30, 0x1C), "muted": RGBColor(0x55, 0x60, 0x4A)},
     "finance": {"bg": RGBColor(0x14, 0x18, 0x1D), "panel": RGBColor(0x1E, 0x24, 0x2B), "accent": RGBColor(0xD4, 0xAF, 0x37), "accent2": RGBColor(0x2E, 0x7D, 0x32), "text": RGBColor(0xF0, 0xED, 0xE6), "muted": RGBColor(0xB8, 0xBE, 0xC8)},
     "tech": {"bg": RGBColor(0x10, 0x14, 0x18), "panel": RGBColor(0x1A, 0x20, 0x26), "accent": RGBColor(0x00, 0xE5, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xE8, 0xF6, 0xF8), "muted": RGBColor(0xA8, 0xBB, 0xC5)},
@@ -135,13 +136,12 @@ THEME_FONTS = {
     "psychology": ("Georgia", "Calibri"),
 }
 
-# ИСПРАВЛЕНО: расширенный авто-поиск тем (30+ категорий)
 THEME_KEYWORDS = (
     (("медиц", "здоров", "врач", "больн", "лекар", "аптек", "диагноз", "хирург", "therapy", "health", "medical", "doctor", "hospital", "clinic", "pharma", "surgery"), "med"),
     (("косм", "звезд", "планет", "вселен", "галакт", "орбит", "ракета", "астероид", "comet", "nebula", "satellite", "rocket", "moon", "mars", "jupiter", "telescope"), "space"),
     (("природ", "экол", "лес", "растен", "животн", "климат", "почва", "река", "горы", "ocean", "wildlife", "botany", "zoology", "ecosystem", "conservation"), "nature"),
     (("финанс", "деньг", "банк", "инвест", "эконом", "бизнес", "прибыл", "акции", "крипто", "budget", "stock", "trading", "startup", "profit", "tax", "loan"), "finance"),
-    (("техно", "робот", "программ", "нейросет", "интеллект", "компьютер", "интернет", "цифров", "IT", "algorithm", "machine learning", "deep learning", "cybersecurity", "blockchain", "cloud"), "tech"),
+    (("техно", "робот", "программ", "нейросет", "интеллект", "компьютер", "интернет", "цифров", "algorithm", "machine learning", "deep learning", "cybersecurity", "blockchain", "cloud"), "tech"),
     (("школ", "учеб", "образован", "курс", "студент", "преподав", "лекция", "exam", "curriculum", "pedagogy", "university", "college", "diploma"), "edu"),
     (("спорт", "футбол", "фитнес", "олимп", "хокке", "баскетбол", "теннис", "бокс", "marathon", "athlete", "training", "workout", "championship"), "sport"),
     (("искусств", "культур", "музык", "театр", "дизайн", "живопис", "кинематограф", "sculpture", "gallery", "concert", "opera", "photography"), "art"),
@@ -154,19 +154,6 @@ THEME_KEYWORDS = (
     (("авто", "машин", "автомобил", "транспорт", "электрокар", "motorcycle", "engine", "driving", "fleet", "electric vehicle"), "auto"),
     (("недвижим", "дом", "квартир", "аренд", "ипотека", "construction", "property", "mortgage", "rental", "architecture"), "real_estate"),
     (("психолог", "мозг", "сознан", "эмоц", "терапия", "mindfulness", "cognitive", "behavior", "stress", "anxiety", "mental health"), "psychology"),
-    (("энерг", "электрич", "солнечн", "ветер", "батарея", "renewable", "power plant", "grid", "hydrogen", "nuclear"), "energy"),
-    (("прав", "закон", "юрист", "суд", "конституц", "legislation", "court", "justice", "contract", "patent"), "law"),
-    (("маркетинг", "реклам", "бренд", "PR", "social media", "advertising", "campaign", "SEO", "content marketing"), "marketing"),
-    (("фарм", "препарат", "таблетк", "vaccine", "clinical trial", "drug", "medicine", "biotech"), "pharma"),
-    (("сельск", "фермер", "урожай", "agro", "livestock", "irrigation", "organic farming", "harvest"), "agriculture"),
-    (("архитект", "здание", "стройка", "urban planning", "interior", "structural", "blueprint", "renovation"), "architecture"),
-    (("логистик", "доставка", "склад", "supply chain", "warehouse", "freight", "shipping", "inventory"), "logistics"),
-    (("HR", "кадр", "найм", "recruitment", "team building", "employee", "onboarding", "talent"), "hr"),
-    (("страхов", "полис", "claim", "underwriting", "coverage", "risk management", "actuarial"), "insurance"),
-    (("телеком", "оптич", "5G", "network", "telephony", "broadband", "signal", "frequency"), "telecom"),
-    (("образование STEM", "coding bootcamp", "online course", "e-learning", "MOOC", "skill development"), "stem_edu"),
-    (("волонтёр", "НКО", "charity", "non-profit", "fundraising", "donation", "community service"), "ngo"),
-    (("UX", "UI", "юзабилити", "user experience", "interface design", "wireframe", "prototype", "usability testing"), "ux_ui"),
 )
 
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
@@ -185,6 +172,7 @@ class Session:
         self.last_imgs = None
         self.last_title_img = None
         self.editing_slide = None
+        self.history = []
 
 
 sessions = {}
@@ -196,28 +184,21 @@ def get_session(user_id):
     return sessions[user_id]
 
 
-# ИСПРАВЛЕНО: умный подбор темы с приоритетами
 def auto_style(topic):
     low = (topic or "").lower()
     scores = {}
-    
     for keywords, theme_key in THEME_KEYWORDS:
         score = 0
         for kw in keywords:
             if kw.lower() in low:
-                # Длинные ключевые слова дают больше веса
                 weight = min(len(kw), 15) / 10
                 score += weight
-        
         if score > 0:
             scores[theme_key] = score
-    
     if scores:
         best_theme = max(scores.items(), key=lambda x: x[1])[0]
         log.info(f"Theme matched: {best_theme} (score={scores[best_theme]:.1f})")
         return best_theme
-    
-    # Fallback: детерминированный выбор по хешу
     pool = ("dark", "light", "color", "art", "space", "tech")
     idx = sum(ord(ch) for ch in low) % len(pool)
     fallback = pool[idx]
@@ -256,6 +237,13 @@ def settings_keyboard(s):
         InlineKeyboardButton(mark(s.style == "light", "☀️ Светлая"), callback_data="style:light"),
         InlineKeyboardButton(mark(s.style == "color", "🎨 Яркая"), callback_data="style:color"),
     ])
+    if s.history:
+        hist_row = []
+        for h in s.history[-3:]:
+            short = h[:15] + "…" if len(h) > 15 else h
+            hist_row.append(InlineKeyboardButton(short, callback_data=f"hist:{h}"))
+        if hist_row:
+            rows.append(hist_row)
     rows.append([InlineKeyboardButton("🚀 Создать презентацию", callback_data="go")])
     return InlineKeyboardMarkup(rows)
 
@@ -264,7 +252,8 @@ def settings_text(s):
     return (
         f"📌 Тема: {s.topic}\n\n"
         f"Слайдов: {s.count}   Оформление: {style_label(s)}\n"
-        "Настрой и жми «Создать». Или напиши новую тему сообщением."
+        "Настрой и жми «Создать». Или напиши новую тему сообщением.\n"
+        "Команды: /help — помощь, /content — текст презентации"
     )
 
 
@@ -282,8 +271,46 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "картинки, диаграммы, факты и цитаты.\n\n"
         "Напиши тему одним сообщением.\n"
         "Например: «Искусственный интеллект в медицине».\n\n"
-        f"(версия {VER})"
+        f"(версия {VER}) Команды: /help"
     )
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📚 *Справка по боту*\n\n"
+        "1️⃣ Напиши тему презентации\n"
+        "2️⃣ Выбери количество слайдов (3-15)\n"
+        "3️⃣ Выбери язык и стиль оформления\n"
+        "4️⃣ Нажми «🚀 Создать презентацию»\n\n"
+        "📝 *Команды:*\n"
+        "/start — начать заново\n"
+        "/help — эта справка\n"
+        "/content — текстовое содержание последней презентации\n"
+        "/cancel — отменить редактирование слайда\n\n"
+        "✏️ После генерации можно нажать на номер слайда и изменить его заголовок\n\n"
+        f"Версия {VER}",
+        parse_mode="Markdown"
+    )
+
+
+async def cmd_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    s = get_session(update.effective_user.id)
+    if not s.last_content:
+        await update.message.reply_text("❌ Сначала создай презентацию")
+        return
+    text = f"📋 *{s.last_content.get('title', s.topic)}*\n\n"
+    text += f"_{s.last_content.get('subtitle', '')}_\n\n"
+    for i, slide in enumerate(s.last_content.get("slides", []), 1):
+        text += f"*{i}. {slide.get('title', '')}*\n"
+        text += f"_{slide.get('lead', '')}_\n"
+        for b in slide.get("bullets", [])[:3]:
+            text += f"• {b}\n"
+        if slide.get("fact"):
+            text += f"💡 {slide['fact']}\n"
+        text += "\n"
+    if len(text) > 4000:
+        text = text[:4000] + "…"
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -310,6 +337,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Подожди, я ещё делаю предыдущую презентацию.")
         return
     s.topic = text[:300]
+    if s.topic not in s.history:
+        s.history.append(s.topic)
+        if len(s.history) > 5:
+            s.history = s.history[-5:]
     await update.message.reply_text(settings_text(s), reply_markup=settings_keyboard(s))
 
 
@@ -336,6 +367,11 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await refresh(q, s)
 
+    elif data.startswith("hist:"):
+        s.topic = data.split(":", 1)[1]
+        await q.answer()
+        await q.edit_message_text(settings_text(s), reply_markup=settings_keyboard(s))
+
     elif data.startswith("edit:"):
         if not s.last_content:
             await q.answer("Сначала создай презентацию")
@@ -359,6 +395,17 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(f"⏳ Рисую «{s.topic}» ({s.count} слайдов, {style_label(s)})…")
         await generate_and_send(update, context, s)
 
+    elif data == "regen":
+        if s.busy:
+            await q.answer("Уже генерирую")
+            return
+        if not s.topic:
+            await q.answer("Нет темы")
+            return
+        await q.answer()
+        await q.message.reply_text(f"🔄 Перегенерирую «{s.topic}»…")
+        await generate_and_send(update, context, s)
+
 
 PROMPT = (
     "You are a top-tier presentation designer and writer. "
@@ -373,6 +420,7 @@ PROMPT = (
     '"bullets" (array of 4 NON-EMPTY informative strings, each 8-18 '
     'words), '
     '"fact" (one surprising fact or witty remark), '
+    '"speaker_notes" (2-3 sentences with tips for the presenter), '
     '"stats" (array of 3 objects with "value" (short number or percent) '
     'and "label" (short description)), '
     '"chart" (object with "title" (string), "type" ("pie" or "bar"), '
@@ -446,6 +494,7 @@ async def ask_ai(s, retry_count=0):
 
 
 async def fallback_content(s):
+    api = WIKI_API if s.lang == "ru" else EN_WIKI_API
     params = {
         "action": "query",
         "format": "json",
@@ -459,7 +508,7 @@ async def fallback_content(s):
     }
     timeout = aiohttp.ClientTimeout(total=15)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
-        async with sess.get(WIKI_API, params=params) as r:
+        async with sess.get(api, params=params) as r:
             data = await r.json(content_type=None)
     pages = (data.get("query") or {}).get("pages") or {}
     ordered = sorted(pages.values(), key=lambda p: p.get("index", 99))
@@ -478,6 +527,7 @@ async def fallback_content(s):
             "img": page.get("title", s.topic),
             "bullets": bullets,
             "fact": "",
+            "speaker_notes": "",
         })
         if len(slides) >= s.count:
             break
@@ -485,17 +535,17 @@ async def fallback_content(s):
         raise ValueError("no Wikipedia data for topic")
     return {
         "title": s.topic,
-        "subtitle": "Материалы собраны из Википедии",
+        "subtitle": "Материалы собраны из Википедии" if s.lang == "ru" else "Materials collected from Wikipedia",
         "img": s.topic,
         "intro": "",
         "slides": slides,
         "stats": [],
         "chart": None,
-        "conclusion": "Изучайте новое каждый день!",
+        "conclusion": "Изучайте новое каждый день!" if s.lang == "ru" else "Learn something new every day!",
     }
 
 
-def prepare_image(raw, w=900, h=600):
+def prepare_image(raw, w=900, h=600, quality=85):
     img = Image.open(io.BytesIO(raw))
     img = img.convert("RGB")
     ar = w / h
@@ -510,7 +560,7 @@ def prepare_image(raw, w=900, h=600):
         img = img.crop((0, top, iw, top + new_h))
     img = img.resize((w, h))
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=85)
+    img.save(out, format="JPEG", quality=quality)
     return out.getvalue()
 
 
@@ -518,18 +568,15 @@ def _tokens(q):
     return set(re.findall(r"[a-z0-9а-яё]{4,}", (q or "").lower()))
 
 
-# ИСПРАВЛЕНО: более строгий фильтр релевантности
 def _relevant(query, title):
     qw = _tokens(query)
     tw = _tokens(title)
     if not qw or not tw:
         return True
-    overlap = qw & tw
-    # Требуется хотя бы одно совпадение из значимых слов
-    return len(overlap) >= 1
+    return bool(qw & tw)
 
 
-async def _download_image(sess, url):
+async def _download_image(sess, url, quality=85):
     try:
         async with sess.get(url) as r:
             if r.status != 200:
@@ -537,14 +584,13 @@ async def _download_image(sess, url):
             raw = await r.read()
         if not raw:
             return None
-        return prepare_image(raw)
+        return prepare_image(raw, quality=quality)
     except Exception as e:
         log.warning("image download failed %s: %s", url, e)
         return None
 
 
-# ИСПРАВЛЕНО: улучшенный поиск фото с 4 источниками
-async def fetch_topic_image(query):
+async def fetch_topic_image(query, quality=85):
     timeout = aiohttp.ClientTimeout(total=6, connect=3)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
         # Источник 1: Wikimedia Commons
@@ -570,7 +616,7 @@ async def fetch_topic_image(query):
                 url = info.get("thumburl") or info.get("url")
                 mime = info.get("mime") or ""
                 if url and mime in ("image/jpeg", "image/png"):
-                    img = await _download_image(sess, url)
+                    img = await _download_image(sess, url, quality)
                     if img:
                         log.info("image from commons: %s", query)
                         return img
@@ -596,7 +642,7 @@ async def fetch_topic_image(query):
             for page in pages.values():
                 url = (page.get("thumbnail") or {}).get("source") or ""
                 if url:
-                    img = await _download_image(sess, url)
+                    img = await _download_image(sess, url, quality)
                     if img:
                         log.info("image from wikipedia: %s", query)
                         return img
@@ -613,35 +659,22 @@ async def fetch_topic_image(query):
                             continue
                         url = res.get("url") or ""
                         if url:
-                            img = await _download_image(sess, url)
+                            img = await _download_image(sess, url, quality)
                             if img:
                                 log.info("image from openverse: %s", query)
                                 return img
         except Exception as e:
             log.warning("openverse failed for %s: %s", query, e)
-        
-        # Источник 4: Unsplash Source (бесплатный API без ключа)
-        try:
-            clean_query = re.sub(r"[^a-zA-Z0-9\s]", "", query)[:50].strip()
-            if clean_query:
-                unsplash_url = f"https://source.unsplash.com/900x600/?{clean_query}"
-                img = await _download_image(sess, unsplash_url)
-                if img:
-                    log.info("image from unsplash: %s", query)
-                    return img
-        except Exception as e:
-            log.warning("unsplash failed for %s: %s", query, e)
     
     return None
 
 
-# ИСПРАВЛЕНО: увеличен лимит параллельной загрузки до 6
-async def fetch_images_parallel(queries, limit=6):
+async def fetch_images_parallel(queries, limit=6, quality=85):
     tasks = []
     for i, q in enumerate(queries):
         if i >= limit or not q:
             continue
-        tasks.append(fetch_topic_image(q))
+        tasks.append(fetch_topic_image(q, quality))
     
     if not tasks:
         return [None] * len(queries)
@@ -766,7 +799,7 @@ def chart_rows(chart):
     return rows if len(rows) >= 2 else []
 
 
-def add_title_slide(prs, content, pal, s, img):
+def add_title_slide(prs, content, pal, s, img, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, Inches(-1.6), Inches(4.6), Inches(5.2), Inches(5.2), pal["accent2"], MSO_SHAPE.OVAL)
@@ -780,9 +813,10 @@ def add_title_slide(prs, content, pal, s, img):
         add_text(slide, Inches(1.05), Inches(5.4), tw, Inches(1.1), intro, 20, pal["accent"], italic=True, font=pal["bfont"])
     if img:
         add_picture(slide, img, Inches(8.8), Inches(2.0), Inches(3.8), Inches(2.9), pal)
+    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-def add_agenda_slide(prs, titles, pal):
+def add_agenda_slide(prs, titles, pal, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
@@ -806,9 +840,10 @@ def add_agenda_slide(prs, titles, pal):
         r2.font.size = Pt(22)
         r2.font.color.rgb = pal["text"]
         r2.font.name = pal["bfont"]
+    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-def add_content_slide(prs, item, pal, num, total, img):
+def add_content_slide(prs, item, pal, num, total, img, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
@@ -832,9 +867,11 @@ def add_content_slide(prs, item, pal, num, total, img):
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.1), Inches(1.0), pal["accent"])
         add_text(slide, Inches(0.95), Inches(6.3), Inches(11.5), Inches(0.65), "💡 " + fact, 17, pal["text"], italic=True, font=pal["bfont"])
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
+    notes = slide.notes_slide.notes_text_frame
+    notes.text = str(item.get("speaker_notes") or f"Слайд {num}: {item.get('title', '')}")
 
 
-def add_stats_slide(prs, stats, pal, num, total):
+def add_stats_slide(prs, stats, pal, num, total, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
@@ -858,9 +895,10 @@ def add_stats_slide(prs, stats, pal, num, total):
         add_text(slide, x + Inches(0.2), Inches(2.6), card_w - Inches(0.4), Inches(1.2), value, 54, pal["accent"], bold=True, align=PP_ALIGN.CENTER, font=pal["hfont"])
         add_text(slide, x + Inches(0.2), Inches(3.9), card_w - Inches(0.4), Inches(1.0), label, 18, pal["muted"], align=PP_ALIGN.CENTER, font=pal["bfont"])
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
+    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-def add_chart_slide(prs, chart, rows, pal, num, total):
+def add_chart_slide(prs, chart, rows, pal, num, total, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
@@ -893,9 +931,10 @@ def add_chart_slide(prs, chart, rows, pal, num, total):
     except Exception as e:
         log.warning("chart styling skipped: %s", e)
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
+    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-def add_final_slide(prs, content, pal, num, total):
+def add_final_slide(prs, content, pal, num, total, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["accent2"])
     add_rect(slide, Inches(-1.4), Inches(-1.8), Inches(4.5), Inches(4.5), pal["accent"], MSO_SHAPE.OVAL)
@@ -903,15 +942,20 @@ def add_final_slide(prs, content, pal, num, total):
     add_text(slide, Inches(1.2), Inches(1.9), Inches(10.9), Inches(1.7), str(content.get("conclusion") or ""), 28, WHITE, align=PP_ALIGN.CENTER, font=pal["bfont"])
     add_text(slide, Inches(1.2), Inches(3.8), Inches(10.9), Inches(1.6), "СПАСИБО ЗА ВНИМАНИЕ!", 56, WHITE, bold=True, align=PP_ALIGN.CENTER, font=pal["hfont"])
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, WHITE, align=PP_ALIGN.RIGHT, font=pal["bfont"])
+    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, WHITE, font=pal["bfont"])
+    notes = slide.notes_slide.notes_text_frame
+    notes.text = "Финальный слайд. Поблагодарите аудиторию и ответьте на вопросы."
 
 
-def build_pptx(content, s, slide_imgs, title_img):
+def build_pptx(content, s, slide_imgs, title_img, quality=85):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
     prs.core_properties.title = str(content.get("title") or s.topic)
     prs.core_properties.subject = s.topic
     prs.core_properties.author = "Presentation Bot"
+    prs.core_properties.created = datetime.now()
+    date_str = datetime.now().strftime("%d.%m.%Y")
     key = resolve_style(s)
     pal = dict(PALETTES.get(key, PALETTES["dark"]))
     hfont, bfont = THEME_FONTS.get(key, ("Trebuchet MS", "Calibri"))
@@ -923,20 +967,20 @@ def build_pptx(content, s, slide_imgs, title_img):
     rows = chart_rows(content.get("chart"))
     has_chart = bool(rows)
     total = 2 + len(slides) + (1 if has_stats else 0) + (1 if has_chart else 0) + 1
-    add_title_slide(prs, content, pal, s, title_img)
-    add_agenda_slide(prs, [it.get("title", "") for it in slides], pal)
+    add_title_slide(prs, content, pal, s, title_img, date_str)
+    add_agenda_slide(prs, [it.get("title", "") for it in slides], pal, date_str)
     num = 3
     for i, item in enumerate(slides):
         img = slide_imgs[i] if i < len(slide_imgs) else None
-        add_content_slide(prs, item, pal, num, total, img)
+        add_content_slide(prs, item, pal, num, total, img, date_str)
         num += 1
     if has_stats:
-        add_stats_slide(prs, stats, pal, num, total)
+        add_stats_slide(prs, stats, pal, num, total, date_str)
         num += 1
     if has_chart:
-        add_chart_slide(prs, content.get("chart"), rows, pal, num, total)
+        add_chart_slide(prs, content.get("chart"), rows, pal, num, total, date_str)
         num += 1
-    add_final_slide(prs, content, pal, num, total)
+    add_final_slide(prs, content, pal, num, total, date_str)
     buf = io.BytesIO()
     prs.save(buf)
     return buf.getvalue()
@@ -979,6 +1023,7 @@ async def generate_and_send(update, context, s):
     status = update.effective_message
     s.busy = True
     t0 = time.monotonic()
+    quality = 85
     try:
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await status.edit_text("🧠 Пишу текст…")
@@ -993,34 +1038,52 @@ async def generate_and_send(update, context, s):
         slides = content.get("slides", [])[: s.count]
         await status.edit_text("🖼 Ищу фото (параллельно)…")
         queries = [str(it.get("img") or it.get("title") or s.topic) for it in slides]
-        slide_imgs = await fetch_images_parallel(queries, limit=6)
+        slide_imgs = await fetch_images_parallel(queries, limit=6, quality=quality)
         title_img = None
         try:
-            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1)
+            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=quality)
             title_img = res[0] if res else None
         except Exception:
             title_img = None
         s.last_imgs = slide_imgs
         s.last_title_img = title_img
         await status.edit_text("🎨 Собираю слайды…")
-        data = build_pptx(content, s, slide_imgs, title_img)
+        data = build_pptx(content, s, slide_imgs, title_img, quality)
+        if len(data) > 5 * 1024 * 1024:
+            log.info("File too large, recompressing with lower quality")
+            quality = 60
+            slide_imgs = await fetch_images_parallel(queries, limit=6, quality=quality)
+            title_img = None
+            try:
+                res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=quality)
+                title_img = res[0] if res else None
+            except Exception:
+                title_img = None
+            s.last_imgs = slide_imgs
+            s.last_title_img = title_img
+            data = build_pptx(content, s, slide_imgs, title_img, quality)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
         pics = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
         secs = int(time.monotonic() - t0)
-        caption = f"✅ Готово за {secs}с! {pal_name} | 🖼 {pics} | v{VER} | {len(slides)} слайдов"
+        total_words = sum(len(str(b).split()) for sl in slides for b in sl.get("bullets", []))
+        caption = f"✅ Готово за {secs}с! {pal_name} | 🖼 {pics} | 📝 {total_words} слов | v{VER} | {len(slides)} слайдов"
         if source == "wiki":
             caption += "\n⚠️ AI-лимит исчерпан — текст из Википедии"
+        if len(data) > 5 * 1024 * 1024:
+            caption += "\n⚠️ Файл сжат для уменьшения размера"
         await context.bot.send_document(
             chat_id=chat_id,
             document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
             caption=caption,
         )
+        buttons = edit_keyboard(len(slides))
+        buttons.inline_keyboard.append([InlineKeyboardButton("🔄 Перегенерировать", callback_data="regen")])
         await context.bot.send_message(
             chat_id,
             "✏️ Нажми номер слайда и напиши новый заголовок:",
-            reply_markup=edit_keyboard(len(slides)),
+            reply_markup=buttons,
         )
         try:
             await status.edit_text("✅ Презентация готова, файл выше 👆")
@@ -1050,6 +1113,8 @@ async def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("content", cmd_content))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
