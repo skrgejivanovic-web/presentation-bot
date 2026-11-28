@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "15"
+VER = "16"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -391,7 +391,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Сначала напиши тему сообщением.")
             return
         await q.answer()
-        await q.edit_message_text(f"⏳ Рисую «{s.topic}» ({s.count} слайдов, {style_label(s)})…")
         await generate_with_progress(update, context, s)
 
     elif data == "regen":
@@ -402,7 +401,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Нет темы")
             return
         await q.answer()
-        await q.message.reply_text(f"🔄 Перегенерирую «{s.topic}»…")
         await generate_with_progress(update, context, s)
 
 
@@ -492,56 +490,148 @@ async def ask_ai(s, retry_count=0):
     raise last_error
 
 
-async def fallback_content(s):
+# ИСПРАВЛЕНО: умный fallback который сам структурирует данные из Википедии
+async def smart_fallback_from_wikipedia(s):
+    """Берём заголовок из Википедии, но структуру делаем сами"""
     api = WIKI_API if s.lang == "ru" else EN_WIKI_API
+    
+    # Шаг 1: Получаем первую статью
     params = {
         "action": "query",
         "format": "json",
         "generator": "search",
         "gsrsearch": s.topic,
-        "gsrlimit": "8",
+        "gsrlimit": "1",
         "gsrnamespace": "0",
-        "prop": "extracts",
+        "prop": "extracts|pageimages",
         "exintro": "1",
         "explaintext": "1",
+        "piprop": "thumbnail",
+        "pithumbsize": "900",
     }
-    timeout = aiohttp.ClientTimeout(total=15)
+    
+    timeout = aiohttp.ClientTimeout(total=10)
     async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
         async with sess.get(api, params=params) as r:
             data = await r.json(content_type=None)
+    
     pages = (data.get("query") or {}).get("pages") or {}
-    ordered = sorted(pages.values(), key=lambda p: p.get("index", 99))
+    if not pages:
+        raise ValueError("no Wikipedia article found")
+    
+    page = list(pages.values())[0]
+    article_title = page.get("title", s.topic)
+    extract = (page.get("extract") or "").strip()
+    thumbnail_url = (page.get("thumbnail") or {}).get("source")
+    
+    # Шаг 2: Разбиваем текст на предложения
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", extract) if x.strip()]
+    
+    # Шаг 3: Создаём структуру слайдов автоматически
     slides = []
-    for page in ordered:
-        extract = (page.get("extract") or "").strip()
-        if not extract:
-            continue
-        sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", extract) if x.strip()]
-        bullets = [x for x in sentences if len(x) > 20][:4]
+    
+    # Первый слайд - введение
+    intro_bullets = []
+    for sent in sentences[:4]:
+        if len(sent) > 20 and len(sent) < 200:
+            intro_bullets.append(sent)
+    if not intro_bullets:
+        intro_bullets = ["Основные сведения о теме", "Краткое описание предмета рассмотрения"]
+    
+    slides.append({
+        "title": "Введение",
+        "lead": f"Знакомство с темой: {article_title}",
+        "img": article_title,
+        "bullets": intro_bullets[:4],
+        "fact": "",
+        "speaker_notes": "Представьте тему аудитории кратко и ясно.",
+    })
+    
+    # Средние слайды - детали из текста
+    detail_sentences = [sent for sent in sentences if len(sent) > 30][:20]
+    chunk_size = max(2, len(detail_sentences) // (s.count - 2)) if s.count > 2 else 2
+    
+    section_names = ["Основная часть", "Детали и аспекты", "Практическое применение", 
+                     "Преимущества и особенности", "Вызовы и решения", "Перспективы развития"]
+    
+    for i in range(min(s.count - 2, 5)):  # Максимум 5 средних слайдов
+        start_idx = i * chunk_size
+        end_idx = start_idx + chunk_size
+        chunk_sents = detail_sentences[start_idx:end_idx]
+        
+        bullets = []
+        for sent in chunk_sents:
+            cleaned = sent.replace("\n", " ").strip()
+            if 20 < len(cleaned) < 180:
+                bullets.append(cleaned)
+        
         if not bullets:
-            bullets = [extract[:300]]
+            bullets = [f"Аспект {i+1} темы {article_title}", "Дополнительные сведения по разделу"]
+        
+        section_name = section_names[i] if i < len(section_names) else f"Раздел {i+1}"
+        
         slides.append({
-            "title": page.get("title", s.topic),
-            "lead": sentences[0] if sentences else "",
-            "img": page.get("title", s.topic),
-            "bullets": bullets,
+            "title": section_name,
+            "lead": f"Подробное рассмотрение: {section_name.lower()} темы {article_title}",
+            "img": f"{article_title} {section_name}",
+            "bullets": bullets[:4],
             "fact": "",
-            "speaker_notes": "",
+            "speaker_notes": f"Расскажите подробнее про {section_name.lower()}.",
         })
-        if len(slides) >= s.count:
-            break
-    if not slides:
-        raise ValueError("no Wikipedia data for topic")
-    return {
-        "title": s.topic,
-        "subtitle": "Материалы собраны из Википедии" if s.lang == "ru" else "Materials collected from Wikipedia",
-        "img": s.topic,
-        "intro": "",
-        "slides": slides,
-        "stats": [],
-        "chart": None,
-        "conclusion": "Изучайте новое каждый день!" if s.lang == "ru" else "Learn something new every day!",
+    
+    # Последний слайд - заключение
+    conclusion_bullets = []
+    remaining_sents = detail_sentences[len(section_names)*chunk_size:]
+    for sent in remaining_sents[:3]:
+        if len(sent) > 25:
+            conclusion_bullets.append(sent)
+    
+    if not conclusion_bullets:
+        conclusion_bullets = [
+            "Подведём итоги рассмотренной темы",
+            "Запомните ключевые моменты презентации",
+            "Эта информация поможет лучше понять предмет"
+        ]
+    
+    slides.append({
+        "title": "Заключение",
+        "lead": f"Итоги по теме: {article_title}",
+        "img": article_title,
+        "bullets": conclusion_bullets[:4],
+        "fact": "",
+        "speaker_notes": "Сделайте выводы и поблагодарите аудиторию.",
+    })
+    
+    # Добавляем статистику и диаграмму (упрощённые)
+    stats = [
+        {"value": f"{len(sentences)}", "label": "предложений найдено"},
+        {"value": f"{len(slides)}", "label": "слайдов создано"},
+        {"value": "Wiki", "label": "источник данных"},
+    ]
+    
+    chart = {
+        "title": f"Структура презентации: {article_title}",
+        "type": "bar",
+        "data": [
+            {"label": "Введение", "value": 1},
+            {"label": "Основная часть", "value": len(slides)-2},
+            {"label": "Заключение", "value": 1},
+        ],
     }
+    
+    result = {
+        "title": article_title,
+        "subtitle": f"Материалы собраны из Википедии ({datetime.now().strftime('%d.%m.%Y')})",
+        "img": article_title,
+        "intro": f"Презентация подготовлена автоматически на основе открытых источников о теме «{article_title}».",
+        "slides": slides,
+        "stats": stats,
+        "chart": chart,
+        "conclusion": f"Мы рассмотрели основные аспекты темы «{article_title}». Спасибо за внимание!",
+    }
+    
+    log.info(f"Wikipedia fallback created {len(slides)} structured slides from '{article_title}'")
+    return result, thumbnail_url
 
 
 def prepare_image(raw, w=900, h=600, quality=85):
@@ -669,7 +759,6 @@ async def fetch_topic_image(query, quality=85):
 
 
 async def fetch_images_parallel(queries, limit=4, quality=85):
-    """Параллельная загрузка картинок с ограничением времени"""
     tasks = []
     for i, q in enumerate(queries):
         if i >= limit or not q:
@@ -679,14 +768,13 @@ async def fetch_images_parallel(queries, limit=4, quality=85):
     if not tasks:
         return [None] * len(queries)
     
-    # Общий таймаут на все задачи: 15 секунд максимум
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*tasks, return_exceptions=True),
-            timeout=15
+            timeout=12
         )
     except asyncio.TimeoutError:
-        log.warning("Image loading timed out after 15s")
+        log.warning("Image loading timed out after 12s")
         results = [None] * len(tasks)
     
     out = []
@@ -781,7 +869,7 @@ def add_bullets(slide, x, y, w, h, bullets, pal, size=18):
     tf.word_wrap = True
     for i, b in enumerate(bullets):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_after = Pt(12)
+        p.space_after = Pt(14)  # Увеличил расстояние между пунктами
         r1 = p.add_run()
         r1.text = "▸ "
         r1.font.size = Pt(size)
@@ -811,6 +899,60 @@ def chart_rows(chart):
         if len(rows) >= 6:
             break
     return rows if len(rows) >= 2 else []
+
+
+# ИСПРАВЛЕНО: схема всегда присутствует
+def ensure_scheme(item):
+    """Если нет схемы, создаём простую из 3 шагов"""
+    scheme = item.get("scheme")
+    if scheme and isinstance(scheme, list) and len(scheme) >= 2:
+        return scheme
+    
+    # Создаём дефолтную схему из заголовка
+    title = str(item.get("title", "")).strip()
+    if not title:
+        return None
+    
+    default_steps = [
+        f"Шаг 1: {title[:30]}...",
+        "Шаг 2: Детализация процесса",
+        "Шаг 3: Результат и вывод",
+    ]
+    return default_steps
+
+
+def add_scheme(slide, steps, pal, top):
+    n = min(len(steps), 4)
+    box_w = Inches(2.7)
+    gap = Inches(0.45)
+    total = n * box_w + (n - 1) * gap
+    start = int((Inches(13.333) - total) / 2)
+    for i, step in enumerate(steps[:4]):
+        x = start + i * (box_w + gap)
+        box = add_rect(
+            slide, x, top, box_w, Inches(1.2),
+            pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE,
+        )
+        box.line.color.rgb = pal["accent"]
+        box.line.width = Pt(1.5)
+        tf = box.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        tf.margin_left = Inches(0.12)
+        tf.margin_right = Inches(0.12)
+        p = tf.paragraphs[0]
+        p.text = f"{i + 1}. {step}"
+        p.alignment = PP_ALIGN.CENTER
+        p.font.size = Pt(16)
+        p.font.bold = True
+        p.font.color.rgb = pal["text"]
+        p.font.name = pal["bfont"]
+        if i < n - 1:
+            add_rect(
+                slide, x + box_w + Inches(0.05), top + Inches(0.45),
+                Inches(0.35), Inches(0.3), pal["accent"],
+                MSO_SHAPE.RIGHT_ARROW,
+            )
 
 
 def add_title_slide(prs, content, pal, s, img, date_str):
@@ -857,29 +999,43 @@ def add_agenda_slide(prs, titles, pal, date_str):
     add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4), f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
+# ИСПРАВЛЕНО: контент-слайд с правильной компоновкой
 def add_content_slide(prs, item, pal, num, total, img, date_str):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
+    
+    # Заголовок (всегда крупный)
     add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1), Inches(1.0), f"{num - 2:02d}", str(item.get("title") or ""), 40, pal)
     add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08), pal["accent"])
+    
     lead = str(item.get("lead") or "")
     if lead:
         add_text(slide, Inches(0.62), Inches(1.62), Inches(12.1), Inches(0.6), lead, 19, pal["muted"], italic=True, font=pal["bfont"])
+    
     bullets = clean_bullets(item.get("bullets"), 4)
-    bsize = 18 if (img or len(bullets) >= 3) else 20
+    scheme = ensure_scheme(item)
+    
     wide = Inches(12.0)
     if img:
         wide = Inches(8.2)
-        bullets = bullets[:3]
         add_picture(slide, img, Inches(9.3), Inches(2.25), Inches(3.45), Inches(2.6), pal)
-    add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(3.4), bullets, pal, size=bsize)
+    
+    # Буллеты или схема
+    if scheme:
+        add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(2.0), bullets[:3], pal, size=17)
+        add_scheme(slide, scheme, pal, Inches(4.55))
+    else:
+        bsize = 18 if (img or len(bullets) >= 3) else 20
+        add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(3.4), bullets, pal, size=bsize)
+    
     fact = str(item.get("fact") or "")
     if fact:
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(1.0), pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
         add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.1), Inches(1.0), pal["accent"])
         add_text(slide, Inches(0.95), Inches(6.3), Inches(11.5), Inches(0.65), "💡 " + fact, 17, pal["text"], italic=True, font=pal["bfont"])
+    
     add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
     notes = slide.notes_slide.notes_text_frame
     notes.text = str(item.get("speaker_notes") or f"Слайд {num}: {item.get('title', '')}")
@@ -1034,12 +1190,11 @@ async def rebuild_and_send(update, context, s):
         await update.message.reply_text(f"😔 Ошибка пересборки: {e}")
 
 
+# ИСПРАВЛЕНО: реальный прогресс-бар с таймером
 async def generate_with_progress(update, context, s):
-    """Генерация с детальным прогресс-баром"""
     chat_id = update.effective_chat.id
     status_msg = update.effective_message
     
-    # Этапы работы и их веса в процентах
     stages = [
         ("🧠 Генерация текста AI", 30),
         ("🖼 Поиск фотографий", 40),
@@ -1049,13 +1204,19 @@ async def generate_with_progress(update, context, s):
     
     current_percent = 0
     stage_index = 0
+    last_update_time = time.monotonic()
     
     async def update_progress(message, increment=0):
-        nonlocal current_percent
+        nonlocal current_percent, last_update_time
         current_percent = min(100, current_percent + increment)
         progress_line = make_progress_bar(current_percent)
+        
+        now = time.monotonic()
+        elapsed = int(now - t0)
+        
         try:
-            await status_msg.edit_text(f"{message}\n{progress_line}")
+            await status_msg.edit_text(f"{message}\n{progress_line}\n⏱ Прошло: {elapsed}с")
+            last_update_time = now
         except Exception:
             pass
     
@@ -1063,14 +1224,48 @@ async def generate_with_progress(update, context, s):
     t0 = time.monotonic()
     
     try:
-        # Этап 1: AI текст
+        # Этап 1: AI текст (с периодическим обновлением)
         await update_progress(f"{stages[stage_index][0]}...", 5)
+        
         source = "AI"
+        wiki_thumbnail_url = None
+        
+        # Таймер для регулярных обновлений во время долгого запроса к AI
+        ai_timer_task = None
+        
+        async def periodic_ai_update():
+            """Обновляет прогресс каждые 10 секунд пока ждём AI"""
+            local_pct = 5
+            while local_pct < 25:
+                await asyncio.sleep(10)
+                local_pct += 5
+                try:
+                    progress_line = make_progress_bar(local_pct)
+                    elapsed = int(time.monotonic() - t0)
+                    await status_msg.edit_text(
+                        f"{stages[stage_index][0]}...\n{progress_line}\n⏱ Прошло: {elapsed}с"
+                    )
+                except Exception:
+                    pass
+        
         try:
+            ai_timer_task = asyncio.create_task(periodic_ai_update())
             content = await ask_ai(s)
+            if ai_timer_task:
+                ai_timer_task.cancel()
+                try:
+                    await ai_timer_task
+                except asyncio.CancelledError:
+                    pass
         except Exception as e:
+            if ai_timer_task:
+                ai_timer_task.cancel()
+                try:
+                    await ai_timer_task
+                except asyncio.CancelledError:
+                    pass
             log.warning("AI unavailable, using Wikipedia fallback: %s", e)
-            content = await fallback_content(s)
+            content, wiki_thumbnail_url = await smart_fallback_from_wikipedia(s)
             source = "wiki"
         
         s.last_content = content
@@ -1082,15 +1277,22 @@ async def generate_with_progress(update, context, s):
         await update_progress(f"{stages[stage_index][0]}...", 5)
         queries = [str(it.get("img") or it.get("title") or s.topic) for it in slides]
         
-        # Загружаем максимум 4 картинки параллельно с общим таймаутом 15 сек
         slide_imgs = await fetch_images_parallel(queries, limit=4, quality=85)
         
         title_img = None
-        try:
-            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=85)
-            title_img = res[0] if res else None
-        except Exception:
-            title_img = None
+        if wiki_thumbnail_url:
+            try:
+                async with aiohttp.ClientSession(headers=HTTP_HEADERS) as sess:
+                    title_img = await _download_image(sess, wiki_thumbnail_url, 85)
+            except Exception:
+                title_img = None
+        
+        if not title_img:
+            try:
+                res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1, quality=85)
+                title_img = res[0] if res else None
+            except Exception:
+                title_img = None
         
         pics_loaded = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
         await update_progress(f"{stages[stage_index][0]} ✅ ({pics_loaded} шт.)", 35)
@@ -1134,7 +1336,7 @@ async def generate_with_progress(update, context, s):
         caption += f"🎨 {pal_name} | 🖼 {pics_loaded} фото | 📝 {total_words} слов\n"
         caption += f"v{VER} | {len(slides)} слайдов | {file_size_mb:.1f} MB"
         if source == "wiki":
-            caption += "\n⚠️ AI-лимит исчерпан — текст из Википедии"
+            caption += "\n⚠️ AI-лимит исчерпан — структура из Википедии"
         
         await context.bot.send_document(
             chat_id=chat_id,
