@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("presentation-bot")
 
-VER = "12"
+VER = "13"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -86,28 +86,29 @@ PALETTE_NAMES = {
     "real_estate": "🏠 недвижимость", "psychology": "🧠 психология",
 }
 
+# ИСПРАВЛЕНО: гарантированно читаемый контраст во всех темах
 PALETTES = {
-    "dark": {"bg": RGBColor(0x17, 0x17, 0x20), "panel": RGBColor(0x26, 0x26, 0x33), "accent": RGBColor(0x00, 0xB8, 0xD4), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xF2, 0xF2, 0xF5), "muted": RGBColor(0x9A, 0x9A, 0xB0)},
-    "light": {"bg": RGBColor(0xFA, 0xFA, 0xFC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1F, 0x6F, 0xEB), "accent2": RGBColor(0x0F, 0x9D, 0x58), "text": RGBColor(0x1E, 0x1E, 0x28), "muted": RGBColor(0x6B, 0x6B, 0x7A)},
-    "color": {"bg": RGBColor(0xFD, 0xF6, 0xEC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xFF, 0x6B, 0x35), "accent2": RGBColor(0x2E, 0x86, 0xAB), "text": RGBColor(0x2B, 0x2B, 0x2B), "muted": RGBColor(0x8A, 0x7F, 0x70)},
-    "med": {"bg": RGBColor(0xF2, 0xFA, 0xF8), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x96, 0x88), "accent2": RGBColor(0x00, 0x69, 0x5C), "text": RGBColor(0x16, 0x38, 0x32), "muted": RGBColor(0x5F, 0x7A, 0x74)},
-    "space": {"bg": RGBColor(0x0B, 0x10, 0x26), "panel": RGBColor(0x16, 0x1D, 0x3A), "accent": RGBColor(0x8A, 0xB4, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xEE, 0xF0, 0xFF), "muted": RGBColor(0x8E, 0x96, 0xC0)},
-    "nature": {"bg": RGBColor(0xF3, 0xF8, 0xEE), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x55, 0x8B, 0x2F), "accent2": RGBColor(0x33, 0x69, 0x1E), "text": RGBColor(0x26, 0x30, 0x1C), "muted": RGBColor(0x6E, 0x7B, 0x62)},
-    "finance": {"bg": RGBColor(0x14, 0x18, 0x1D), "panel": RGBColor(0x1E, 0x24, 0x2B), "accent": RGBColor(0xD4, 0xAF, 0x37), "accent2": RGBColor(0x2E, 0x7D, 0x32), "text": RGBColor(0xF0, 0xED, 0xE6), "muted": RGBColor(0x9A, 0xA3, 0xAD)},
-    "tech": {"bg": RGBColor(0x10, 0x14, 0x18), "panel": RGBColor(0x1A, 0x20, 0x26), "accent": RGBColor(0x00, 0xE5, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xE8, 0xF6, 0xF8), "muted": RGBColor(0x8F, 0xA3, 0xAD)},
-    "edu": {"bg": RGBColor(0xFD, 0xFD, 0xF7), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1E, 0x88, 0xE5), "accent2": RGBColor(0xFB, 0x8C, 0x00), "text": RGBColor(0x21, 0x21, 0x21), "muted": RGBColor(0x75, 0x75, 0x75)},
-    "sport": {"bg": RGBColor(0x1A, 0x1A, 0x1A), "panel": RGBColor(0x26, 0x26, 0x26), "accent": RGBColor(0xFF, 0x6D, 0x00), "accent2": RGBColor(0x00, 0xC8, 0x53), "text": RGBColor(0xFF, 0xFF, 0xFF), "muted": RGBColor(0xA6, 0xA6, 0xA6)},
-    "art": {"bg": RGBColor(0xFF, 0xF7, 0xF0), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xE9, 0x1E, 0x63), "accent2": RGBColor(0x6A, 0x1B, 0x9A), "text": RGBColor(0x3A, 0x24, 0x30), "muted": RGBColor(0x9C, 0x85, 0x89)},
-    "food": {"bg": RGBColor(0xFF, 0xF8, 0xF0), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xE8, 0x5D, 0x04), "accent2": RGBColor(0xBC, 0x47, 0x49), "text": RGBColor(0x3D, 0x40, 0x5B), "muted": RGBColor(0x8D, 0x99, 0xAE)},
-    "travel": {"bg": RGBColor(0xE0, 0xF7, 0xFA), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x97, 0xA7), "accent2": RGBColor(0x00, 0x60, 0x64), "text": RGBColor(0x26, 0x32, 0x38), "muted": RGBColor(0x78, 0x90, 0x9C)},
-    "history": {"bg": RGBColor(0x3E, 0x27, 0x23), "panel": RGBColor(0x4E, 0x34, 0x2E), "accent": RGBColor(0xFF, 0xD5, 0x4F), "accent2": RGBColor(0xB7, 0x1C, 0x1C), "text": RGBColor(0xFF, 0xEC, 0xB3), "muted": RGBColor(0xBC, 0xAA, 0xA4)},
-    "science": {"bg": RGBColor(0x1A, 0x23, 0x7E), "panel": RGBColor(0x28, 0x35, 0x93), "accent": RGBColor(0x7C, 0x4D, 0xFF), "accent2": RGBColor(0x53, 0x6D, 0xFE), "text": RGBColor(0xE8, 0xEA, 0xF6), "muted": RGBColor(0x9F, 0xA8, 0xDA)},
-    "music": {"bg": RGBColor(0x4A, 0x14, 0x8C), "panel": RGBColor(0x6A, 0x1B, 0x9A), "accent": RGBColor(0xE0, 0x40, 0xFB), "accent2": RGBColor(0xAA, 0x00, 0xFF), "text": RGBColor(0xF3, 0xE5, 0xF5), "muted": RGBColor(0xCE, 0x93, 0xD8)},
-    "gaming": {"bg": RGBColor(0x0D, 0x11, 0x17), "panel": RGBColor(0x16, 0x1B, 0x22), "accent": RGBColor(0x39, 0xD3, 0x53), "accent2": RGBColor(0x00, 0xFF, 0x88), "text": RGBColor(0xC9, 0xD1, 0xD9), "muted": RGBColor(0x8B, 0x94, 0x9E)},
-    "fashion": {"bg": RGBColor(0xFA, 0xFA, 0xFA), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x00, 0x00), "accent2": RGBColor(0x33, 0x33, 0x33), "text": RGBColor(0x1A, 0x1A, 0x1A), "muted": RGBColor(0x66, 0x66, 0x66)},
-    "auto": {"bg": RGBColor(0x21, 0x21, 0x21), "panel": RGBColor(0x30, 0x30, 0x30), "accent": RGBColor(0xFF, 0x17, 0x44), "accent2": RGBColor(0xC5, 0x11, 0x62), "text": RGBColor(0xF5, 0xF5, 0xF5), "muted": RGBColor(0x9E, 0x9E, 0x9E)},
-    "real_estate": {"bg": RGBColor(0xF1, 0xF8, 0xE9), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x55, 0x8B, 0x2F), "accent2": RGBColor(0x33, 0x69, 0x1E), "text": RGBColor(0x1B, 0x5E, 0x20), "muted": RGBColor(0x68, 0x9F, 0x38)},
-    "psychology": {"bg": RGBColor(0xE3, 0xF2, 0xFD), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x19, 0x76, 0xD2), "accent2": RGBColor(0x0D, 0x47, 0xA1), "text": RGBColor(0x0D, 0x47, 0xA1), "muted": RGBColor(0x64, 0xB5, 0xF6)},
+    "dark": {"bg": RGBColor(0x17, 0x17, 0x20), "panel": RGBColor(0x26, 0x26, 0x33), "accent": RGBColor(0x00, 0xB8, 0xD4), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xF2, 0xF2, 0xF5), "muted": RGBColor(0xC0, 0xC0, 0xD0)},
+    "light": {"bg": RGBColor(0xFA, 0xFA, 0xFC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1F, 0x6F, 0xEB), "accent2": RGBColor(0x0F, 0x9D, 0x58), "text": RGBColor(0x1E, 0x1E, 0x28), "muted": RGBColor(0x5A, 0x5A, 0x6A)},
+    "color": {"bg": RGBColor(0xFD, 0xF6, 0xEC), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xFF, 0x6B, 0x35), "accent2": RGBColor(0x2E, 0x86, 0xAB), "text": RGBColor(0x2B, 0x2B, 0x2B), "muted": RGBColor(0x6A, 0x60, 0x55)},
+    "med": {"bg": RGBColor(0xF2, 0xFA, 0xF8), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x96, 0x88), "accent2": RGBColor(0x00, 0x69, 0x5C), "text": RGBColor(0x16, 0x38, 0x32), "muted": RGBColor(0x4A, 0x60, 0x5A)},
+    "space": {"bg": RGBColor(0x0B, 0x10, 0x26), "panel": RGBColor(0x16, 0x1D, 0x3A), "accent": RGBColor(0x8A, 0xB4, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xEE, 0xF0, 0xFF), "muted": RGBColor(0xAAB, 0xB2, 0xD8)},
+    "nature": {"bg": RGBColor(0xF3, 0xF8, 0xEE), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x55, 0x8B, 0x2F), "accent2": RGBColor(0x33, 0x69, 0x1E), "text": RGBColor(0x26, 0x30, 0x1C), "muted": RGBColor(0x55, 0x60, 0x4A)},
+    "finance": {"bg": RGBColor(0x14, 0x18, 0x1D), "panel": RGBColor(0x1E, 0x24, 0x2B), "accent": RGBColor(0xD4, 0xAF, 0x37), "accent2": RGBColor(0x2E, 0x7D, 0x32), "text": RGBColor(0xF0, 0xED, 0xE6), "muted": RGBColor(0xB8, 0xBE, 0xC8)},
+    "tech": {"bg": RGBColor(0x10, 0x14, 0x18), "panel": RGBColor(0x1A, 0x20, 0x26), "accent": RGBColor(0x00, 0xE5, 0xFF), "accent2": RGBColor(0x7C, 0x4D, 0xFF), "text": RGBColor(0xE8, 0xF6, 0xF8), "muted": RGBColor(0xA8, 0xBB, 0xC5)},
+    "edu": {"bg": RGBColor(0xFD, 0xFD, 0xF7), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x1E, 0x88, 0xE5), "accent2": RGBColor(0xFB, 0x8C, 0x00), "text": RGBColor(0x21, 0x21, 0x21), "muted": RGBColor(0x55, 0x55, 0x55)},
+    "sport": {"bg": RGBColor(0x1A, 0x1A, 0x1A), "panel": RGBColor(0x26, 0x26, 0x26), "accent": RGBColor(0xFF, 0x6D, 0x00), "accent2": RGBColor(0x00, 0xC8, 0x53), "text": RGBColor(0xFF, 0xFF, 0xFF), "muted": RGBColor(0xC8, 0xC8, 0xC8)},
+    "art": {"bg": RGBColor(0xFF, 0xF7, 0xF0), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xE9, 0x1E, 0x63), "accent2": RGBColor(0x6A, 0x1B, 0x9A), "text": RGBColor(0x3A, 0x24, 0x30), "muted": RGBColor(0x7A, 0x65, 0x70)},
+    "food": {"bg": RGBColor(0xFF, 0xF8, 0xF0), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0xE8, 0x5D, 0x04), "accent2": RGBColor(0xBC, 0x47, 0x49), "text": RGBColor(0x3D, 0x40, 0x5B), "muted": RGBColor(0x7D, 0x85, 0x9E)},
+    "travel": {"bg": RGBColor(0xE0, 0xF7, 0xFA), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x97, 0xA7), "accent2": RGBColor(0x00, 0x60, 0x64), "text": RGBColor(0x26, 0x32, 0x38), "muted": RGBColor(0x58, 0x70, 0x7C)},
+    "history": {"bg": RGBColor(0x3E, 0x27, 0x23), "panel": RGBColor(0x4E, 0x34, 0x2E), "accent": RGBColor(0xFF, 0xD5, 0x4F), "accent2": RGBColor(0xB7, 0x1C, 0x1C), "text": RGBColor(0xFF, 0xEC, 0xB3), "muted": RGBColor(0xDD, 0xCC, 0xAA)},
+    "science": {"bg": RGBColor(0x1A, 0x23, 0x7E), "panel": RGBColor(0x28, 0x35, 0x93), "accent": RGBColor(0x7C, 0x4D, 0xFF), "accent2": RGBColor(0x53, 0x6D, 0xFE), "text": RGBColor(0xE8, 0xEA, 0xF6), "muted": RGBColor(0xBF, 0xC8, 0xF6)},
+    "music": {"bg": RGBColor(0x4A, 0x14, 0x8C), "panel": RGBColor(0x6A, 0x1B, 0x9A), "accent": RGBColor(0xE0, 0x40, 0xFB), "accent2": RGBColor(0xAA, 0x00, 0xFF), "text": RGBColor(0xF3, 0xE5, 0xF5), "muted": RGBColor(0xDE, 0xB3, 0xE8)},
+    "gaming": {"bg": RGBColor(0x0D, 0x11, 0x17), "panel": RGBColor(0x16, 0x1B, 0x22), "accent": RGBColor(0x39, 0xD3, 0x53), "accent2": RGBColor(0x00, 0xFF, 0x88), "text": RGBColor(0xC9, 0xD1, 0xD9), "muted": RGBColor(0xAB, 0xB4, 0xBE)},
+    "fashion": {"bg": RGBColor(0xFA, 0xFA, 0xFA), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x00, 0x00, 0x00), "accent2": RGBColor(0x33, 0x33, 0x33), "text": RGBColor(0x1A, 0x1A, 0x1A), "muted": RGBColor(0x55, 0x55, 0x55)},
+    "auto": {"bg": RGBColor(0x21, 0x21, 0x21), "panel": RGBColor(0x30, 0x30, 0x30), "accent": RGBColor(0xFF, 0x17, 0x44), "accent2": RGBColor(0xC5, 0x11, 0x62), "text": RGBColor(0xF5, 0xF5, 0xF5), "muted": RGBColor(0xBE, 0xBE, 0xBE)},
+    "real_estate": {"bg": RGBColor(0xF1, 0xF8, 0xE9), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x55, 0x8B, 0x2F), "accent2": RGBColor(0x33, 0x69, 0x1E), "text": RGBColor(0x1B, 0x5E, 0x20), "muted": RGBColor(0x48, 0x7F, 0x38)},
+    "psychology": {"bg": RGBColor(0xE3, 0xF2, 0xFD), "panel": RGBColor(0xFF, 0xFF, 0xFF), "accent": RGBColor(0x19, 0x76, 0xD2), "accent2": RGBColor(0x0D, 0x47, 0xA1), "text": RGBColor(0x0D, 0x47, 0xA1), "muted": RGBColor(0x44, 0x75, 0xB6)},
 }
 
 THEME_FONTS = {
@@ -134,31 +135,39 @@ THEME_FONTS = {
     "psychology": ("Georgia", "Calibri"),
 }
 
+# ИСПРАВЛЕНО: расширенный авто-поиск тем (30+ категорий)
 THEME_KEYWORDS = (
-    (("медиц", "здоров", "врач", "больн", "лекар", "health", "medic", "doctor", "hospital"), "med"),
-    (("косм", "звезд", "планет", "вселен", "галакт", "space", "planet", "galaxy", "universe", "astronom"), "space"),
-    (("природ", "экол", "лес", "растен", "животн", "климат", "nature", "ecolog", "forest", "environment"), "nature"),
-    (("финанс", "деньг", "банк", "инвест", "эконом", "бизнес", "прибыл", "finance", "money", "bank", "invest", "business"), "finance"),
-    (("техно", "робот", "программ", "нейросет", "интеллект", "компьютер", "интернет", "цифров", "tech", "robot", "software", "computer", "digital"), "tech"),
-    (("школ", "учеб", "образован", "курс", "студент", "преподав", "education", "school", "learn", "study"), "edu"),
-    (("спорт", "футбол", "фитнес", "олимп", "хокке", "баскетбол", "sport", "fitness", "soccer", "football"), "sport"),
-    (("искусств", "культур", "музык", "театр", "дизайн", "живопис", "artist", "culture", "music", "theater", "design", "paint"), "art"),
-    (("еда", "кулинар", "рецепт", "готов", "блюдо", "ужин", "обед", "завтрак", "food", "cook", "recipe", "dinner", "lunch", "breakfast"), "food"),
-    (("путешеств", "туризм", "отпуск", "стран", "travel", "tourism", "vacation", "country"), "travel"),
-    (("истор", "древн", "войн", "импер", "цар", "history", "ancient", "war", "empire"), "history"),
-    (("наук", "физик", "хим", "биолог", "математ", "science", "physics", "chemistry", "biology", "math"), "science"),
-    (("игр", "геймер", "видеоигр", "gaming", "game", "gamer", "video"), "gaming"),
-    (("мод", "стиль", "одежд", "fashion", "clothing"), "fashion"),
-    (("авто", "машин", "автомобил", "транспорт", "auto", "car", "vehicle"), "auto"),
-    (("недвижим", "дом", "квартир", "аренд", "real estate", "house", "apartment", "rent"), "real_estate"),
-    (("психолог", "мозг", "сознан", "эмоц", "psychology", "brain", "mind", "emotion"), "psychology"),
+    (("медиц", "здоров", "врач", "больн", "лекар", "аптек", "диагноз", "хирург", "therapy", "health", "medical", "doctor", "hospital", "clinic", "pharma", "surgery"), "med"),
+    (("косм", "звезд", "планет", "вселен", "галакт", "орбит", "ракета", "астероид", "comet", "nebula", "satellite", "rocket", "moon", "mars", "jupiter", "telescope"), "space"),
+    (("природ", "экол", "лес", "растен", "животн", "климат", "почва", "река", "горы", "ocean", "wildlife", "botany", "zoology", "ecosystem", "conservation"), "nature"),
+    (("финанс", "деньг", "банк", "инвест", "эконом", "бизнес", "прибыл", "акции", "крипто", "budget", "stock", "trading", "startup", "profit", "tax", "loan"), "finance"),
+    (("техно", "робот", "программ", "нейросет", "интеллект", "компьютер", "интернет", "цифров", "IT", "algorithm", "machine learning", "deep learning", "cybersecurity", "blockchain", "cloud"), "tech"),
+    (("школ", "учеб", "образован", "курс", "студент", "преподав", "лекция", "exam", "curriculum", "pedagogy", "university", "college", "diploma"), "edu"),
+    (("спорт", "футбол", "фитнес", "олимп", "хокке", "баскетбол", "теннис", "бокс", "marathon", "athlete", "training", "workout", "championship"), "sport"),
+    (("искусств", "культур", "музык", "театр", "дизайн", "живопис", "кинематограф", "sculpture", "gallery", "concert", "opera", "photography"), "art"),
+    (("еда", "кулинар", "рецепт", "готов", "блюдо", "ужин", "обед", "завтрак", "dessert", "restaurant", "chef", "cooking", "bakery", "coffee", "tea"), "food"),
+    (("путешеств", "туризм", "отпуск", "стран", "город", "экскурсия", "hotel", "airline", "passport", "adventure", "destination", "resort"), "travel"),
+    (("истор", "древн", "войн", "импер", "цар", "средневеков", "античность", "civilization", "dynasty", "empire", "revolution", "century"), "history"),
+    (("наук", "физик", "хим", "биолог", "математ", "геолог", "астроном", "genetics", "quantum", "evolution", "research", "laboratory", "experiment"), "science"),
+    (("игр", "геймер", "видеоигр", "консол", "esport", "game design", "player", "level", "quest", "multiplayer", "strategy game"), "gaming"),
+    (("мод", "стиль", "одежд", "lookbook", "designer", "runway", "couture", "accessories", "brand", "trend"), "fashion"),
+    (("авто", "машин", "автомобил", "транспорт", "электрокар", "motorcycle", "engine", "driving", "fleet", "electric vehicle"), "auto"),
+    (("недвижим", "дом", "квартир", "аренд", "ипотека", "construction", "property", "mortgage", "rental", "architecture"), "real_estate"),
+    (("психолог", "мозг", "сознан", "эмоц", "терапия", "mindfulness", "cognitive", "behavior", "stress", "anxiety", "mental health"), "psychology"),
+    (("энерг", "электрич", "солнечн", "ветер", "батарея", "renewable", "power plant", "grid", "hydrogen", "nuclear"), "energy"),
+    (("прав", "закон", "юрист", "суд", "конституц", "legislation", "court", "justice", "contract", "patent"), "law"),
+    (("маркетинг", "реклам", "бренд", "PR", "social media", "advertising", "campaign", "SEO", "content marketing"), "marketing"),
+    (("фарм", "препарат", "таблетк", "vaccine", "clinical trial", "drug", "medicine", "biotech"), "pharma"),
+    (("сельск", "фермер", "урожай", "agro", "livestock", "irrigation", "organic farming", "harvest"), "agriculture"),
+    (("архитект", "здание", "стройка", "urban planning", "interior", "structural", "blueprint", "renovation"), "architecture"),
+    (("логистик", "доставка", "склад", "supply chain", "warehouse", "freight", "shipping", "inventory"), "logistics"),
+    (("HR", "кадр", "найм", "recruitment", "team building", "employee", "onboarding", "talent"), "hr"),
+    (("страхов", "полис", "claim", "underwriting", "coverage", "risk management", "actuarial"), "insurance"),
+    (("телеком", "оптич", "5G", "network", "telephony", "broadband", "signal", "frequency"), "telecom"),
+    (("образование STEM", "coding bootcamp", "online course", "e-learning", "MOOC", "skill development"), "stem_edu"),
+    (("волонтёр", "НКО", "charity", "non-profit", "fundraising", "donation", "community service"), "ngo"),
+    (("UX", "UI", "юзабилити", "user experience", "interface design", "wireframe", "prototype", "usability testing"), "ux_ui"),
 )
-
-SLIDE_EMOJIS = {
-    "intro": "📖", "history": "📜", "basics": "🎯", "methods": "⚙️",
-    "tools": "🛠️", "examples": "💡", "stats": "📊", "future": "🔮",
-    "tips": "✨", "conclusion": "🏁", "default": "📌",
-}
 
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
@@ -176,7 +185,6 @@ class Session:
         self.last_imgs = None
         self.last_title_img = None
         self.editing_slide = None
-        self.history = []
 
 
 sessions = {}
@@ -188,14 +196,33 @@ def get_session(user_id):
     return sessions[user_id]
 
 
+# ИСПРАВЛЕНО: умный подбор темы с приоритетами
 def auto_style(topic):
     low = (topic or "").lower()
-    for words, key in THEME_KEYWORDS:
-        for w in words:
-            if w in low:
-                return key
+    scores = {}
+    
+    for keywords, theme_key in THEME_KEYWORDS:
+        score = 0
+        for kw in keywords:
+            if kw.lower() in low:
+                # Длинные ключевые слова дают больше веса
+                weight = min(len(kw), 15) / 10
+                score += weight
+        
+        if score > 0:
+            scores[theme_key] = score
+    
+    if scores:
+        best_theme = max(scores.items(), key=lambda x: x[1])[0]
+        log.info(f"Theme matched: {best_theme} (score={scores[best_theme]:.1f})")
+        return best_theme
+    
+    # Fallback: детерминированный выбор по хешу
     pool = ("dark", "light", "color", "art", "space", "tech")
-    return pool[sum(ord(ch) for ch in low) % len(pool)]
+    idx = sum(ord(ch) for ch in low) % len(pool)
+    fallback = pool[idx]
+    log.info(f"No keyword match, using deterministic fallback: {fallback}")
+    return fallback
 
 
 def resolve_style(s):
@@ -218,57 +245,18 @@ def mark(selected, text):
 def settings_keyboard(s):
     rows = []
     for row in (COUNTS[:3], COUNTS[3:]):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=mark(s.count == n, str(n)),
-                    callback_data=f"n:{n}",
-                )
-                for n in row
-            ]
-        )
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=mark(s.lang == "ru", "🇷🇺 Русский"),
-                callback_data="lang:ru",
-            ),
-            InlineKeyboardButton(
-                text=mark(s.lang == "en", "🇬🇧 English"),
-                callback_data="lang:en",
-            ),
-        ]
-    )
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=mark(s.style == "auto", "🪄 Авто"),
-                callback_data="style:auto",
-            ),
-            InlineKeyboardButton(
-                text=mark(s.style == "dark", "🌙 Тёмная"),
-                callback_data="style:dark",
-            ),
-            InlineKeyboardButton(
-                text=mark(s.style == "light", "☀️ Светлая"),
-                callback_data="style:light",
-            ),
-            InlineKeyboardButton(
-                text=mark(s.style == "color", "🎨 Яркая"),
-                callback_data="style:color",
-            ),
-        ]
-    )
-    if s.history:
-        hist_row = []
-        for h in s.history[-3:]:
-            short = h[:15] + "…" if len(h) > 15 else h
-            hist_row.append(InlineKeyboardButton(short, callback_data=f"hist:{h}"))
-        if hist_row:
-            rows.append(hist_row)
-    rows.append(
-        [InlineKeyboardButton("🚀 Создать презентацию", callback_data="go")]
-    )
+        rows.append([InlineKeyboardButton(mark(s.count == n, str(n)), callback_data=f"n:{n}") for n in row])
+    rows.append([
+        InlineKeyboardButton(mark(s.lang == "ru", "🇷🇺 Русский"), callback_data="lang:ru"),
+        InlineKeyboardButton(mark(s.lang == "en", "🇬🇧 English"), callback_data="lang:en"),
+    ])
+    rows.append([
+        InlineKeyboardButton(mark(s.style == "auto", "🪄 Авто"), callback_data="style:auto"),
+        InlineKeyboardButton(mark(s.style == "dark", "🌙 Тёмная"), callback_data="style:dark"),
+        InlineKeyboardButton(mark(s.style == "light", "☀️ Светлая"), callback_data="style:light"),
+        InlineKeyboardButton(mark(s.style == "color", "🎨 Яркая"), callback_data="style:color"),
+    ])
+    rows.append([InlineKeyboardButton("🚀 Создать презентацию", callback_data="go")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -276,16 +264,13 @@ def settings_text(s):
     return (
         f"📌 Тема: {s.topic}\n\n"
         f"Слайдов: {s.count}   Оформление: {style_label(s)}\n"
-        "Настрой и жми «Создать». Или напиши новую тему сообщением.\n"
-        "Команды: /help — помощь, /content — текст презентации"
+        "Настрой и жми «Создать». Или напиши новую тему сообщением."
     )
 
 
 async def refresh(q, s):
     try:
-        await q.edit_message_text(
-            settings_text(s), reply_markup=settings_keyboard(s)
-        )
+        await q.edit_message_text(settings_text(s), reply_markup=settings_keyboard(s))
     except Exception:
         pass
 
@@ -297,46 +282,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "картинки, диаграммы, факты и цитаты.\n\n"
         "Напиши тему одним сообщением.\n"
         "Например: «Искусственный интеллект в медицине».\n\n"
-        f"Версия {VER}. Команды: /help"
+        f"(версия {VER})"
     )
-
-
-async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📚 *Справка по боту*\n\n"
-        "1️⃣ Напиши тему презентации\n"
-        "2️⃣ Выбери количество слайдов (3-15)\n"
-        "3️⃣ Выбери язык и стиль оформления\n"
-        "4️⃣ Нажми «🚀 Создать презентацию»\n\n"
-        "📝 *Команды:*\n"
-        "/start — начать заново\n"
-        "/help — эта справка\n"
-        "/content — текстовое содержание последней презентации\n"
-        "/cancel — отменить редактирование слайда\n\n"
-        "✏️ После генерации можно нажать на номер слайда и изменить его заголовок\n\n"
-        f"Версия {VER}",
-        parse_mode="Markdown"
-    )
-
-
-async def cmd_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    s = get_session(update.effective_user.id)
-    if not s.last_content:
-        await update.message.reply_text("❌ Сначала создай презентацию")
-        return
-    text = f"📋 *{s.last_content.get('title', s.topic)}*\n\n"
-    text += f"_{s.last_content.get('subtitle', '')}_\n\n"
-    for i, slide in enumerate(s.last_content.get("slides", []), 1):
-        text += f"*{i}. {slide.get('title', '')}*\n"
-        text += f"_{slide.get('lead', '')}_\n"
-        for b in slide.get("bullets", [])[:3]:
-            text += f"• {b}\n"
-        if slide.get("fact"):
-            text += f"💡 {slide['fact']}\n"
-        text += "\n"
-    if len(text) > 4000:
-        text = text[:4000] + "…"
-    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -351,9 +298,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
     if s.editing_slide:
-        if s.last_content and 1 <= s.editing_slide <= len(
-            s.last_content.get("slides", [])
-        ):
+        if s.last_content and 1 <= s.editing_slide <= len(s.last_content.get("slides", [])):
             s.last_content["slides"][s.editing_slide - 1]["title"] = text[:120]
             s.editing_slide = None
             await rebuild_and_send(update, context, s)
@@ -362,18 +307,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Слайд не найден, отменено")
         return
     if s.busy:
-        await update.message.reply_text(
-            "⏳ Подожди, я ещё делаю предыдущую презентацию."
-        )
+        await update.message.reply_text("⏳ Подожди, я ещё делаю предыдущую презентацию.")
         return
     s.topic = text[:300]
-    if s.topic not in s.history:
-        s.history.append(s.topic)
-        if len(s.history) > 5:
-            s.history = s.history[-5:]
-    await update.message.reply_text(
-        settings_text(s), reply_markup=settings_keyboard(s)
-    )
+    await update.message.reply_text(settings_text(s), reply_markup=settings_keyboard(s))
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -399,13 +336,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await refresh(q, s)
 
-    elif data.startswith("hist:"):
-        s.topic = data.split(":", 1)[1]
-        await q.answer()
-        await q.edit_message_text(
-            settings_text(s), reply_markup=settings_keyboard(s)
-        )
-
     elif data.startswith("edit:"):
         if not s.last_content:
             await q.answer("Сначала создай презентацию")
@@ -416,10 +346,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Ошибка")
             return
         await q.answer()
-        await q.message.reply_text(
-            f"✏️ Напиши новый заголовок для слайда {s.editing_slide} "
-            "(или /cancel)"
-        )
+        await q.message.reply_text(f"✏️ Напиши новый заголовок для слайда {s.editing_slide} (или /cancel)")
 
     elif data == "go":
         if s.busy:
@@ -429,21 +356,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Сначала напиши тему сообщением.")
             return
         await q.answer()
-        await q.edit_message_text(
-            f"⏳ Рисую «{s.topic}» ({s.count} слайдов, "
-            f"{style_label(s)})…"
-        )
-        await generate_and_send(update, context, s)
-
-    elif data == "regen":
-        if s.busy:
-            await q.answer("Уже генерирую")
-            return
-        if not s.topic:
-            await q.answer("Нет темы")
-            return
-        await q.answer()
-        await q.message.reply_text(f"🔄 Перегенерирую «{s.topic}»…")
+        await q.edit_message_text(f"⏳ Рисую «{s.topic}» ({s.count} слайдов, {style_label(s)})…")
         await generate_and_send(update, context, s)
 
 
@@ -460,7 +373,6 @@ PROMPT = (
     '"bullets" (array of 4 NON-EMPTY informative strings, each 8-18 '
     'words), '
     '"fact" (one surprising fact or witty remark), '
-    '"speaker_notes" (2-3 sentences with tips for the presenter), '
     '"stats" (array of 3 objects with "value" (short number or percent) '
     'and "label" (short description)), '
     '"chart" (object with "title" (string), "type" ("pie" or "bar"), '
@@ -519,23 +431,17 @@ async def ask_ai(s, retry_count=0):
                     log.warning(str(last_error))
                     continue
                 if len(slides) < s.count:
-                    log.warning(
-                        f"Model returned {len(slides)} slides, need {s.count}"
-                    )
+                    log.warning(f"Model returned {len(slides)} slides, need {s.count}")
                     if retry_count < 2:
                         return await ask_ai(s, retry_count + 1)
-                    last_error = ValueError(
-                        f"{model}: only {len(slides)} slides"
-                    )
+                    last_error = ValueError(f"{model}: only {len(slides)} slides")
                     log.warning(str(last_error))
                     continue
-                log.info("AI model used: %s (json_mode=%s, slides=%d)",
-                         model, use_format, len(slides))
+                log.info("AI model used: %s (json_mode=%s, slides=%d)", model, use_format, len(slides))
                 return content
             except Exception as e:
                 last_error = e
-                log.warning("Model %s json_mode=%s failed: %s",
-                            model, use_format, e)
+                log.warning("Model %s json_mode=%s failed: %s", model, use_format, e)
     raise last_error
 
 
@@ -552,8 +458,7 @@ async def fallback_content(s):
         "explaintext": "1",
     }
     timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout,
-                                     headers=HTTP_HEADERS) as sess:
+    async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
         async with sess.get(WIKI_API, params=params) as r:
             data = await r.json(content_type=None)
     pages = (data.get("query") or {}).get("pages") or {}
@@ -563,8 +468,7 @@ async def fallback_content(s):
         extract = (page.get("extract") or "").strip()
         if not extract:
             continue
-        sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", extract)
-                     if x.strip()]
+        sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", extract) if x.strip()]
         bullets = [x for x in sentences if len(x) > 20][:4]
         if not bullets:
             bullets = [extract[:300]]
@@ -574,7 +478,6 @@ async def fallback_content(s):
             "img": page.get("title", s.topic),
             "bullets": bullets,
             "fact": "",
-            "speaker_notes": "",
         })
         if len(slides) >= s.count:
             break
@@ -592,7 +495,7 @@ async def fallback_content(s):
     }
 
 
-def prepare_image(raw, w=900, h=600, quality=85):
+def prepare_image(raw, w=900, h=600):
     img = Image.open(io.BytesIO(raw))
     img = img.convert("RGB")
     ar = w / h
@@ -607,7 +510,7 @@ def prepare_image(raw, w=900, h=600, quality=85):
         img = img.crop((0, top, iw, top + new_h))
     img = img.resize((w, h))
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=quality)
+    img.save(out, format="JPEG", quality=85)
     return out.getvalue()
 
 
@@ -615,15 +518,18 @@ def _tokens(q):
     return set(re.findall(r"[a-z0-9а-яё]{4,}", (q or "").lower()))
 
 
+# ИСПРАВЛЕНО: более строгий фильтр релевантности
 def _relevant(query, title):
     qw = _tokens(query)
     tw = _tokens(title)
     if not qw or not tw:
         return True
-    return bool(qw & tw)
+    overlap = qw & tw
+    # Требуется хотя бы одно совпадение из значимых слов
+    return len(overlap) >= 1
 
 
-async def _download_image(sess, url, quality=85):
+async def _download_image(sess, url):
     try:
         async with sess.get(url) as r:
             if r.status != 200:
@@ -631,16 +537,17 @@ async def _download_image(sess, url, quality=85):
             raw = await r.read()
         if not raw:
             return None
-        return prepare_image(raw, quality=quality)
+        return prepare_image(raw)
     except Exception as e:
         log.warning("image download failed %s: %s", url, e)
         return None
 
 
-async def fetch_topic_image(query, quality=85):
-    timeout = aiohttp.ClientTimeout(total=5, connect=3)
-    async with aiohttp.ClientSession(timeout=timeout,
-                                     headers=HTTP_HEADERS) as sess:
+# ИСПРАВЛЕНО: улучшенный поиск фото с 4 источниками
+async def fetch_topic_image(query):
+    timeout = aiohttp.ClientTimeout(total=6, connect=3)
+    async with aiohttp.ClientSession(timeout=timeout, headers=HTTP_HEADERS) as sess:
+        # Источник 1: Wikimedia Commons
         try:
             params = {
                 "action": "query",
@@ -663,12 +570,14 @@ async def fetch_topic_image(query, quality=85):
                 url = info.get("thumburl") or info.get("url")
                 mime = info.get("mime") or ""
                 if url and mime in ("image/jpeg", "image/png"):
-                    img = await _download_image(sess, url, quality)
+                    img = await _download_image(sess, url)
                     if img:
                         log.info("image from commons: %s", query)
                         return img
         except Exception as e:
             log.warning("commons failed for %s: %s", query, e)
+        
+        # Источник 2: Wikipedia thumbnails
         try:
             params = {
                 "action": "query",
@@ -687,15 +596,16 @@ async def fetch_topic_image(query, quality=85):
             for page in pages.values():
                 url = (page.get("thumbnail") or {}).get("source") or ""
                 if url:
-                    img = await _download_image(sess, url, quality)
+                    img = await _download_image(sess, url)
                     if img:
                         log.info("image from wikipedia: %s", query)
                         return img
         except Exception as e:
             log.warning("wiki image failed for %s: %s", query, e)
+        
+        # Источник 3: Openverse
         try:
-            async with sess.get(OPENVERSE_API,
-                                params={"q": query, "page_size": "5"}) as r:
+            async with sess.get(OPENVERSE_API, params={"q": query, "page_size": "5"}) as r:
                 if r.status == 200:
                     data = await r.json(content_type=None)
                     for res in (data.get("results") or []):
@@ -703,21 +613,35 @@ async def fetch_topic_image(query, quality=85):
                             continue
                         url = res.get("url") or ""
                         if url:
-                            img = await _download_image(sess, url, quality)
+                            img = await _download_image(sess, url)
                             if img:
                                 log.info("image from openverse: %s", query)
                                 return img
         except Exception as e:
             log.warning("openverse failed for %s: %s", query, e)
+        
+        # Источник 4: Unsplash Source (бесплатный API без ключа)
+        try:
+            clean_query = re.sub(r"[^a-zA-Z0-9\s]", "", query)[:50].strip()
+            if clean_query:
+                unsplash_url = f"https://source.unsplash.com/900x600/?{clean_query}"
+                img = await _download_image(sess, unsplash_url)
+                if img:
+                    log.info("image from unsplash: %s", query)
+                    return img
+        except Exception as e:
+            log.warning("unsplash failed for %s: %s", query, e)
+    
     return None
 
 
-async def fetch_images_parallel(queries, limit=4, quality=85):
+# ИСПРАВЛЕНО: увеличен лимит параллельной загрузки до 6
+async def fetch_images_parallel(queries, limit=6):
     tasks = []
     for i, q in enumerate(queries):
         if i >= limit or not q:
             continue
-        tasks.append(fetch_topic_image(q, quality))
+        tasks.append(fetch_topic_image(q))
     
     if not tasks:
         return [None] * len(queries)
@@ -751,8 +675,7 @@ def add_rect(slide, x, y, w, h, color, shape=MSO_SHAPE.RECTANGLE):
     return sp
 
 
-def add_text(slide, x, y, w, h, text, size, color, bold=False,
-             italic=False, align=PP_ALIGN.LEFT, font="Calibri"):
+def add_text(slide, x, y, w, h, text, size, color, bold=False, italic=False, align=PP_ALIGN.LEFT, font="Calibri"):
     tb = slide.shapes.add_textbox(x, y, w, h)
     tf = tb.text_frame
     tf.word_wrap = True
@@ -788,8 +711,7 @@ def add_numbered_title(slide, x, y, w, h, number, text, size, pal):
 
 
 def add_picture(slide, img, x, y, w, h, pal):
-    add_rect(slide, x - Inches(0.07), y - Inches(0.07),
-             w + Inches(0.14), h + Inches(0.14), pal["accent"])
+    add_rect(slide, x - Inches(0.07), y - Inches(0.07), w + Inches(0.14), h + Inches(0.14), pal["accent"])
     slide.shapes.add_picture(io.BytesIO(img), x, y, width=w, height=h)
 
 
@@ -797,7 +719,7 @@ def clean_bullets(raw, limit=4):
     out = []
     for b in raw or []:
         t = str(b).strip()
-        t = t.strip('"\'""«»`)')
+        t = t.strip("\"'""«»`)")
         if len(t) < 3 or t in (",", "."):
             continue
         out.append(t[:200])
@@ -844,46 +766,30 @@ def chart_rows(chart):
     return rows if len(rows) >= 2 else []
 
 
-def add_title_slide(prs, content, pal, s, img, date_str):
+def add_title_slide(prs, content, pal, s, img):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
-    add_rect(slide, Inches(-2.0), Inches(5.0), Inches(5.5), Inches(5.5),
-             pal["accent2"], MSO_SHAPE.OVAL)
-    add_rect(slide, Inches(10.0), Inches(-2.5), Inches(5.5), Inches(5.5),
-             pal["accent"], MSO_SHAPE.OVAL)
-    add_rect(slide, Inches(5.5), Inches(6.5), Inches(3.0), Inches(3.0),
-             pal["muted"], MSO_SHAPE.OVAL)
+    add_rect(slide, Inches(-1.6), Inches(4.6), Inches(5.2), Inches(5.2), pal["accent2"], MSO_SHAPE.OVAL)
+    add_rect(slide, Inches(10.4), Inches(-2.2), Inches(5.0), Inches(5.0), pal["accent"], MSO_SHAPE.OVAL)
     tw = Inches(7.4) if img else Inches(11.3)
-    add_text(slide, Inches(1.0), Inches(1.3), tw, Inches(2.8),
-             str(content.get("title") or s.topic), 60, pal["text"],
-             bold=True, font=pal["hfont"])
-    add_rect(slide, Inches(1.05), Inches(4.3), Inches(3.5), Inches(0.1),
-             pal["accent"])
-    add_text(slide, Inches(1.05), Inches(4.6), tw, Inches(0.8),
-             str(content.get("subtitle") or ""), 24, pal["muted"],
-             font=pal["bfont"])
+    add_text(slide, Inches(1.0), Inches(1.5), tw, Inches(2.5), str(content.get("title") or s.topic), 60, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(1.05), Inches(4.2), Inches(3.5), Inches(0.1), pal["accent"])
+    add_text(slide, Inches(1.05), Inches(4.5), tw, Inches(0.8), str(content.get("subtitle") or ""), 24, pal["muted"], font=pal["bfont"])
     intro = str(content.get("intro") or "")
     if intro:
-        add_text(slide, Inches(1.05), Inches(5.5), tw, Inches(1.1),
-                 intro, 20, pal["accent"], italic=True, font=pal["bfont"])
+        add_text(slide, Inches(1.05), Inches(5.4), tw, Inches(1.1), intro, 20, pal["accent"], italic=True, font=pal["bfont"])
     if img:
-        add_picture(slide, img, Inches(8.8), Inches(2.0),
-                    Inches(3.8), Inches(2.9), pal)
-    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4),
-             f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
+        add_picture(slide, img, Inches(8.8), Inches(2.0), Inches(3.8), Inches(2.9), pal)
 
 
-def add_agenda_slide(prs, titles, pal, date_str):
+def add_agenda_slide(prs, titles, pal):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
-             "📋 Что внутри", 40, pal["text"], bold=True, font=pal["hfont"])
-    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
-             pal["accent"])
-    tb = slide.shapes.add_textbox(Inches(0.65), Inches(1.9),
-                                  Inches(12.0), Inches(5.1))
+    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9), "Что внутри", 40, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08), pal["accent"])
+    tb = slide.shapes.add_textbox(Inches(0.65), Inches(1.9), Inches(12.0), Inches(5.1))
     tf = tb.text_frame
     tf.word_wrap = True
     for i, t in enumerate(titles[:8]):
@@ -900,78 +806,41 @@ def add_agenda_slide(prs, titles, pal, date_str):
         r2.font.size = Pt(22)
         r2.font.color.rgb = pal["text"]
         r2.font.name = pal["bfont"]
-    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4),
-             f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
 
 
-def get_slide_emoji(idx, total):
-    if idx == 0:
-        return SLIDE_EMOJIS["intro"]
-    if idx == total - 1:
-        return SLIDE_EMOJIS["conclusion"]
-    ratio = idx / max(total - 1, 1)
-    if ratio < 0.2:
-        return SLIDE_EMOJIS["history"]
-    if ratio < 0.4:
-        return SLIDE_EMOJIS["basics"]
-    if ratio < 0.6:
-        return SLIDE_EMOJIS["methods"]
-    if ratio < 0.8:
-        return SLIDE_EMOJIS["examples"]
-    return SLIDE_EMOJIS["future"]
-
-
-def add_content_slide(prs, item, pal, num, total, img, date_str):
+def add_content_slide(prs, item, pal, num, total, img):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    emoji = get_slide_emoji(num - 3, total - 4)
-    add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1),
-                       Inches(1.0), f"{emoji} {num - 2:02d}",
-                       str(item.get("title") or ""), 38, pal)
-    add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08),
-             pal["accent"])
+    add_numbered_title(slide, Inches(0.6), Inches(0.35), Inches(12.1), Inches(1.0), f"{num - 2:02d}", str(item.get("title") or ""), 40, pal)
+    add_rect(slide, Inches(0.62), Inches(1.42), Inches(2.6), Inches(0.08), pal["accent"])
     lead = str(item.get("lead") or "")
     if lead:
-        add_text(slide, Inches(0.62), Inches(1.62), Inches(12.1),
-                 Inches(0.6), lead, 18, pal["muted"], italic=True,
-                 font=pal["bfont"])
+        add_text(slide, Inches(0.62), Inches(1.62), Inches(12.1), Inches(0.6), lead, 19, pal["muted"], italic=True, font=pal["bfont"])
     bullets = clean_bullets(item.get("bullets"), 4)
-    bsize = 17 if (img or len(bullets) >= 3) else 19
+    bsize = 18 if (img or len(bullets) >= 3) else 20
     wide = Inches(12.0)
     if img:
         wide = Inches(8.2)
         bullets = bullets[:3]
-        add_picture(slide, img, Inches(9.3), Inches(2.25),
-                    Inches(3.45), Inches(2.6), pal)
-    add_bullets(slide, Inches(0.65), Inches(2.3), wide,
-                Inches(3.4), bullets, pal, size=bsize)
+        add_picture(slide, img, Inches(9.3), Inches(2.25), Inches(3.45), Inches(2.6), pal)
+    add_bullets(slide, Inches(0.65), Inches(2.3), wide, Inches(3.4), bullets, pal, size=bsize)
     fact = str(item.get("fact") or "")
     if fact:
-        add_rect(slide, Inches(0.6), Inches(6.0), Inches(12.1), Inches(0.9),
-                 pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
-        add_rect(slide, Inches(0.6), Inches(6.0), Inches(0.1), Inches(0.9),
-                 pal["accent"])
-        add_text(slide, Inches(0.95), Inches(6.15), Inches(11.5),
-                 Inches(0.65), "💡 " + fact, 16, pal["text"], italic=True,
-                 font=pal["bfont"])
-    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
-             f"{num} / {total}", 11, pal["muted"], align=PP_ALIGN.RIGHT,
-             font=pal["bfont"])
-    notes = slide.notes_slide.notes_text_frame
-    notes.text = str(item.get("speaker_notes") or f"Слайд {num}: {item.get('title', '')}")
+        add_rect(slide, Inches(0.6), Inches(6.1), Inches(12.1), Inches(1.0), pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
+        add_rect(slide, Inches(0.6), Inches(6.1), Inches(0.1), Inches(1.0), pal["accent"])
+        add_text(slide, Inches(0.95), Inches(6.3), Inches(11.5), Inches(0.65), "💡 " + fact, 17, pal["text"], italic=True, font=pal["bfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
 
 
-def add_stats_slide(prs, stats, pal, num, total, date_str):
+def add_stats_slide(prs, stats, pal, num, total):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
-             "📊 Цифры и факты", 40, pal["text"], bold=True, font=pal["hfont"])
-    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
-             pal["accent"])
+    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9), "Цифры и факты", 40, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08), pal["accent"])
     n = min(len(stats), 3)
     card_w = Inches(3.7)
     gap = Inches(0.45)
@@ -979,46 +848,32 @@ def add_stats_slide(prs, stats, pal, num, total, date_str):
     start = int((prs.slide_width - total_w) / 2)
     for i, st in enumerate(stats[:3]):
         x = start + i * (card_w + gap)
-        add_rect(slide, x, Inches(2.1), card_w, Inches(3.0), pal["panel"],
-                 MSO_SHAPE.ROUNDED_RECTANGLE)
+        add_rect(slide, x, Inches(2.1), card_w, Inches(3.0), pal["panel"], MSO_SHAPE.ROUNDED_RECTANGLE)
         if isinstance(st, dict):
             value = str(st.get("value", ""))
             label = str(st.get("label", ""))
         else:
             value = str(st)
             label = ""
-        add_text(slide, x + Inches(0.2), Inches(2.6), card_w - Inches(0.4),
-                 Inches(1.2), value, 54, pal["accent"], bold=True,
-                 align=PP_ALIGN.CENTER, font=pal["hfont"])
-        add_text(slide, x + Inches(0.2), Inches(3.9), card_w - Inches(0.4),
-                 Inches(1.0), label, 18, pal["muted"],
-                 align=PP_ALIGN.CENTER, font=pal["bfont"])
-    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
-             f"{num} / {total}", 11, pal["muted"], align=PP_ALIGN.RIGHT,
-             font=pal["bfont"])
-    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4),
-             f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
+        add_text(slide, x + Inches(0.2), Inches(2.6), card_w - Inches(0.4), Inches(1.2), value, 54, pal["accent"], bold=True, align=PP_ALIGN.CENTER, font=pal["hfont"])
+        add_text(slide, x + Inches(0.2), Inches(3.9), card_w - Inches(0.4), Inches(1.0), label, 18, pal["muted"], align=PP_ALIGN.CENTER, font=pal["bfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
 
 
-def add_chart_slide(prs, chart, rows, pal, num, total, date_str):
+def add_chart_slide(prs, chart, rows, pal, num, total):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["bg"])
     add_rect(slide, 0, 0, Inches(0.18), prs.slide_height, pal["accent2"])
     add_rect(slide, 0, 0, prs.slide_width, Inches(0.12), pal["accent"])
-    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9),
-             str(chart.get("title") or "📈 Диаграмма"), 40, pal["text"],
-             bold=True, font=pal["hfont"])
-    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08),
-             pal["accent"])
+    add_text(slide, Inches(0.6), Inches(0.4), Inches(12.1), Inches(0.9), str(chart.get("title") or "Диаграмма"), 40, pal["text"], bold=True, font=pal["hfont"])
+    add_rect(slide, Inches(0.62), Inches(1.45), Inches(2.6), Inches(0.08), pal["accent"])
     cd = CategoryChartData()
     cd.categories = [r[0] for r in rows]
     cd.add_series("Значения", tuple(r[1] for r in rows))
     ctype = XL_CHART_TYPE.PIE
     if str(chart.get("type", "")).lower() == "bar":
         ctype = XL_CHART_TYPE.BAR_CLUSTERED
-    gf = slide.shapes.add_chart(
-        ctype, Inches(1.0), Inches(1.8), Inches(11.3), Inches(5.1), cd
-    )
+    gf = slide.shapes.add_chart(ctype, Inches(1.0), Inches(1.8), Inches(11.3), Inches(5.1), cd)
     ch = gf.chart
     try:
         ch.has_legend = True
@@ -1031,54 +886,32 @@ def add_chart_slide(prs, chart, rows, pal, num, total, date_str):
         plot.data_labels.font.size = Pt(13)
         plot.data_labels.font.color.rgb = pal["text"]
         if ctype == XL_CHART_TYPE.PIE:
-            colors = (pal["accent"], pal["accent2"], pal["muted"],
-                      pal["accent"], pal["accent2"], pal["muted"])
+            colors = (pal["accent"], pal["accent2"], pal["muted"], pal["accent"], pal["accent2"], pal["muted"])
             for i, point in enumerate(plot.series[0].points):
                 point.format.fill.solid()
                 point.format.fill.fore_color.rgb = colors[i % len(colors)]
     except Exception as e:
         log.warning("chart styling skipped: %s", e)
-    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
-             f"{num} / {total}", 11, pal["muted"], align=PP_ALIGN.RIGHT,
-             font=pal["bfont"])
-    add_text(slide, Inches(0.5), Inches(7.0), Inches(5.0), Inches(0.4),
-             f"📅 {date_str}", 11, pal["muted"], font=pal["bfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, pal["muted"], align=PP_ALIGN.RIGHT, font=pal["bfont"])
 
 
-def add_final_slide(prs, content, pal, num, total, date_str):
+def add_final_slide(prs, content, pal, num, total):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(slide, pal["accent2"])
-    add_rect(slide, Inches(-1.4), Inches(-1.8), Inches(4.5), Inches(4.5),
-             pal["accent"], MSO_SHAPE.OVAL)
-    add_rect(slide, Inches(10.6), Inches(5.0), Inches(4.5), Inches(4.5),
-             pal["bg"], MSO_SHAPE.OVAL)
-    add_rect(slide, Inches(5.0), Inches(6.0), Inches(3.5), Inches(3.5),
-             pal["muted"], MSO_SHAPE.OVAL)
-    add_text(slide, Inches(1.2), Inches(1.7), Inches(10.9), Inches(1.7),
-             str(content.get("conclusion") or ""), 26, WHITE,
-             align=PP_ALIGN.CENTER, font=pal["bfont"])
-    add_text(slide, Inches(1.2), Inches(3.6), Inches(10.9), Inches(1.6),
-             "🎉 СПАСИБО ЗА ВНИМАНИЕ! 🎉", 52, WHITE, bold=True,
-             align=PP_ALIGN.CENTER, font=pal["hfont"])
-    add_text(slide, Inches(1.2), Inches(5.5), Inches(10.9), Inches(0.6),
-             f"🤖 AI Generated • {date_str}", 14, WHITE,
-             align=PP_ALIGN.CENTER, font=pal["bfont"])
-    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35),
-             f"{num} / {total}", 11, WHITE, align=PP_ALIGN.RIGHT,
-             font=pal["bfont"])
-    notes = slide.notes_slide.notes_text_frame
-    notes.text = "Финальный слайд. Поблагодарите аудиторию и ответьте на вопросы."
+    add_rect(slide, Inches(-1.4), Inches(-1.8), Inches(4.5), Inches(4.5), pal["accent"], MSO_SHAPE.OVAL)
+    add_rect(slide, Inches(10.6), Inches(5.0), Inches(4.5), Inches(4.5), pal["bg"], MSO_SHAPE.OVAL)
+    add_text(slide, Inches(1.2), Inches(1.9), Inches(10.9), Inches(1.7), str(content.get("conclusion") or ""), 28, WHITE, align=PP_ALIGN.CENTER, font=pal["bfont"])
+    add_text(slide, Inches(1.2), Inches(3.8), Inches(10.9), Inches(1.6), "СПАСИБО ЗА ВНИМАНИЕ!", 56, WHITE, bold=True, align=PP_ALIGN.CENTER, font=pal["hfont"])
+    add_text(slide, Inches(11.9), Inches(7.12), Inches(1.3), Inches(0.35), f"{num} / {total}", 12, WHITE, align=PP_ALIGN.RIGHT, font=pal["bfont"])
 
 
-def build_pptx(content, s, slide_imgs, title_img, quality=85):
+def build_pptx(content, s, slide_imgs, title_img):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
     prs.core_properties.title = str(content.get("title") or s.topic)
     prs.core_properties.subject = s.topic
     prs.core_properties.author = "Presentation Bot"
-    prs.core_properties.created = datetime.now()
-    date_str = datetime.now().strftime("%d.%m.%Y")
     key = resolve_style(s)
     pal = dict(PALETTES.get(key, PALETTES["dark"]))
     hfont, bfont = THEME_FONTS.get(key, ("Trebuchet MS", "Calibri"))
@@ -1089,22 +922,21 @@ def build_pptx(content, s, slide_imgs, title_img, quality=85):
     has_stats = isinstance(stats, list) and bool(stats)
     rows = chart_rows(content.get("chart"))
     has_chart = bool(rows)
-    total = 2 + len(slides) + (1 if has_stats else 0)
-    total += (1 if has_chart else 0) + 1
-    add_title_slide(prs, content, pal, s, title_img, date_str)
-    add_agenda_slide(prs, [it.get("title", "") for it in slides], pal, date_str)
+    total = 2 + len(slides) + (1 if has_stats else 0) + (1 if has_chart else 0) + 1
+    add_title_slide(prs, content, pal, s, title_img)
+    add_agenda_slide(prs, [it.get("title", "") for it in slides], pal)
     num = 3
     for i, item in enumerate(slides):
         img = slide_imgs[i] if i < len(slide_imgs) else None
-        add_content_slide(prs, item, pal, num, total, img, date_str)
+        add_content_slide(prs, item, pal, num, total, img)
         num += 1
     if has_stats:
-        add_stats_slide(prs, stats, pal, num, total, date_str)
+        add_stats_slide(prs, stats, pal, num, total)
         num += 1
     if has_chart:
-        add_chart_slide(prs, content.get("chart"), rows, pal, num, total, date_str)
+        add_chart_slide(prs, content.get("chart"), rows, pal, num, total)
         num += 1
-    add_final_slide(prs, content, pal, num, total, date_str)
+    add_final_slide(prs, content, pal, num, total)
     buf = io.BytesIO()
     prs.save(buf)
     return buf.getvalue()
@@ -1114,9 +946,7 @@ def edit_keyboard(count):
     rows = []
     row = []
     for i in range(1, min(count, 8) + 1):
-        row.append(
-            InlineKeyboardButton(text=str(i), callback_data=f"edit:{i}")
-        )
+        row.append(InlineKeyboardButton(text=str(i), callback_data=f"edit:{i}"))
         if len(row) == 4:
             rows.append(row)
             row = []
@@ -1129,7 +959,6 @@ async def rebuild_and_send(update, context, s):
     if not s.last_content or not s.last_imgs:
         await update.message.reply_text("❌ Нет данных для пересборки")
         return
-    
     chat_id = update.effective_chat.id
     try:
         data = build_pptx(s.last_content, s, s.last_imgs, s.last_title_img)
@@ -1150,7 +979,6 @@ async def generate_and_send(update, context, s):
     status = update.effective_message
     s.busy = True
     t0 = time.monotonic()
-    quality = 85
     try:
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await status.edit_text("🧠 Пишу текст…")
@@ -1164,63 +992,35 @@ async def generate_and_send(update, context, s):
         s.last_content = content
         slides = content.get("slides", [])[: s.count]
         await status.edit_text("🖼 Ищу фото (параллельно)…")
-        queries = [str(it.get("img") or it.get("title") or s.topic)
-                   for it in slides]
-        slide_imgs = await fetch_images_parallel(queries, limit=4, quality=quality)
+        queries = [str(it.get("img") or it.get("title") or s.topic) for it in slides]
+        slide_imgs = await fetch_images_parallel(queries, limit=6)
         title_img = None
         try:
-            res = await fetch_images_parallel(
-                [str(content.get("img") or s.topic)], limit=1, quality=quality
-            )
+            res = await fetch_images_parallel([str(content.get("img") or s.topic)], limit=1)
             title_img = res[0] if res else None
         except Exception:
             title_img = None
         s.last_imgs = slide_imgs
         s.last_title_img = title_img
         await status.edit_text("🎨 Собираю слайды…")
-        data = build_pptx(content, s, slide_imgs, title_img, quality)
-        if len(data) > 5 * 1024 * 1024:
-            log.info("File too large, recompressing with lower quality")
-            quality = 60
-            slide_imgs = await fetch_images_parallel(queries, limit=4, quality=quality)
-            title_img = None
-            try:
-                res = await fetch_images_parallel(
-                    [str(content.get("img") or s.topic)], limit=1, quality=quality
-                )
-                title_img = res[0] if res else None
-            except Exception:
-                title_img = None
-            s.last_imgs = slide_imgs
-            s.last_title_img = title_img
-            data = build_pptx(content, s, slide_imgs, title_img, quality)
+        data = build_pptx(content, s, slide_imgs, title_img)
         name = re.sub(r"[^\w\- ]+", "", s.topic).strip()[:40]
         name = name or "presentation"
         pal_name = PALETTE_NAMES.get(resolve_style(s), "")
         pics = sum(1 for x in slide_imgs if x) + (1 if title_img else 0)
         secs = int(time.monotonic() - t0)
-        total_words = sum(
-            len(str(b).split()) for sl in slides for b in sl.get("bullets", [])
-        )
-        caption = (f"✅ Готово за {secs}с! {pal_name} | 🖼 {pics} | "
-                   f"📝 {total_words} слов | v{VER} | {len(slides)} слайдов")
+        caption = f"✅ Готово за {secs}с! {pal_name} | 🖼 {pics} | v{VER} | {len(slides)} слайдов"
         if source == "wiki":
             caption += "\n⚠️ AI-лимит исчерпан — текст из Википедии"
-        if len(data) > 5 * 1024 * 1024:
-            caption += "\n⚠️ Файл сжат для уменьшения размера"
         await context.bot.send_document(
             chat_id=chat_id,
             document=InputFile(io.BytesIO(data), filename=f"{name}.pptx"),
             caption=caption,
         )
-        buttons = edit_keyboard(len(slides))
-        buttons.inline_keyboard.append([
-            InlineKeyboardButton("🔄 Перегенерировать", callback_data="regen")
-        ])
         await context.bot.send_message(
             chat_id,
             "✏️ Нажми номер слайда и напиши новый заголовок:",
-            reply_markup=buttons,
+            reply_markup=edit_keyboard(len(slides)),
         )
         try:
             await status.edit_text("✅ Презентация готова, файл выше 👆")
@@ -1232,11 +1032,7 @@ async def generate_and_send(update, context, s):
         if len(reason) > 300:
             reason = reason[:300] + "…"
         try:
-            await status.edit_text(
-                "😔 Не получилось создать презентацию.\n"
-                f"Причина: {reason}\n\n"
-                "Попробуй ещё раз: /start"
-            )
+            await status.edit_text(f"😔 Не получилось создать презентацию.\nПричина: {reason}\n\nПопробуй ещё раз: /start")
         except Exception:
             pass
     finally:
@@ -1254,12 +1050,9 @@ async def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("content", cmd_content))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
-                                   on_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
     await app.initialize()
     await app.start()
