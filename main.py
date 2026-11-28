@@ -6,6 +6,7 @@ import os
 import re
 import time
 from datetime import datetime
+import base64  # <-- ДОБАВИЛ ЭТУ СТРОКУ (нужно для авторизации)
 
 import aiohttp
 from aiohttp import web
@@ -15,7 +16,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 from telegram import (
     InlineKeyboardButton,
@@ -44,13 +45,13 @@ VER = "20"
 # --- Настройки окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN", "")
 GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID", "")
-GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "") # Это Authorization Key из кабинета
+GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "") 
 
 PORT = int(os.getenv("PORT", "10000"))
 
 # URL для получения токена доступа (OAuth)
+# Используем стандартный эндпоинт для физлиц
 GIGACHAT_OAUTH_URL = "https://ngrok.devices.sberbank.ru/api/v1/oauth/token" 
-# NOTE: Реальный URL может отличаться, используем стандартный для физлиц
 REAL_GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 COUNTS = (3, 5, 7, 10, 12, 15)
@@ -469,7 +470,7 @@ async def ask_gigachat(prompt_text):
         "Content-Type": "application/json"
     }
     
-    timeout = aiohttp.ClientTimeout(total=60) # Даем больше времени на ответ AI
+    timeout = aiohttp.ClientTimeout(total=60) 
     
     async with aiohttp.ClientSession(timeout=timeout) as sess:
         try:
@@ -505,7 +506,6 @@ async def ask_ai_multi(s):
         slides = content.get("slides", [])
         
         if not isinstance(slides, list) or len(slides) < s.count:
-             # Если мало слайдов, догенерируем заглушками или попробуем еще раз
              log.warning(f"Got {len(slides)} slides, need {s.count}. Trying again...")
              raw_response = await ask_gigachat(prompt)
              json_str = extract_json(raw_response)
@@ -1312,7 +1312,9 @@ async def main():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     log.info("Bot started (polling), version %s", VER)
-    log.info("Active models: %s", ", ".join(p for p,_ in MODEL_CHAIN))
+    
+    # ИСПРАВЛЕНО: убрали ссылку на несуществующий MODEL_CHAIN
+    log.info("Using GigaChat API")
 
     webapp = web.Application()
     webapp.router.add_get("/", health)
